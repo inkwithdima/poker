@@ -1,0 +1,1910 @@
+<!DOCTYPE html>
+<html lang="ru" dir="ltr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#08080B" />
+<title>Poker Coach — образовательный тренажёр</title>
+
+<!--
+  ============================================================================
+  POKER COACH  ·  Telegram Mini App прототип  ·  один самодостаточный файл
+  Образовательный покерный тренажёр. БЕЗ игры на деньги. НЕ казино.
+  ----------------------------------------------------------------------------
+  ТОЧКИ ИНТЕГРАЦИИ (на будущее):
+  [TG]  Telegram WebApp SDK    — скрипт ниже + блок init в JS (раздел 1)
+  [API] Backend                — функции с пометкой // BACKEND: ...
+  [AI]  AI-анализ раздач        — analyzeDecision(): см. // AI: ...
+  [SUB] Подписка / оплата       — экран scrSub(): // SUB: ...
+  [GEO] Геолокация + карта клубов — scrMap(): // GEO/MAPS: ...
+  ============================================================================
+-->
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<!-- Яндекс.Карты подгружаются динамически при открытии вкладки «Клубы» (см. loadYandex) -->
+<style>
+:root{
+  --bg:#08080B; --bg2:#0E0E13; --surface:rgba(255,255,255,.055); --surface2:rgba(255,255,255,.09);
+  --stroke:rgba(255,255,255,.10); --stroke2:rgba(255,255,255,.16);
+  --text:#F4F4F7; --muted:#8C8C97; --dim:#5C5C66;
+  --red:#FF3B43; --red2:#D62828; --redglow:rgba(255,59,67,.45);
+  --grad-red:linear-gradient(135deg,#FF5257 0%,#D11E22 100%);
+  --grad-card:linear-gradient(160deg,rgba(255,255,255,.10),rgba(255,255,255,.03));
+  --radius:24px; --shadow:0 18px 50px rgba(0,0,0,.55);
+  --fdisp:"Bricolage Grotesque",system-ui,sans-serif;
+  --fbody:"Manrope",system-ui,-apple-system,sans-serif; --max:480px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{margin:0;padding:0;}
+body{
+  font-family:var(--fbody);color:var(--text);min-height:100vh;min-height:100dvh;
+  background:var(--bg);display:flex;justify-content:center;align-items:stretch;
+  -webkit-font-smoothing:antialiased;overflow-x:hidden;
+}
+#app{
+  width:100%;max-width:var(--max);min-height:100vh;min-height:100dvh;position:relative;
+  display:flex;flex-direction:column;overflow:hidden;background:var(--bg);
+  background-image:
+    radial-gradient(120% 70% at 80% -10%,rgba(255,59,67,.20),transparent 60%),
+    radial-gradient(120% 60% at -10% 8%,rgba(255,59,67,.10),transparent 55%),
+    radial-gradient(90% 50% at 50% 110%,rgba(120,120,160,.10),transparent 60%);
+}
+#app::before{
+  content:"";position:absolute;inset:0;pointer-events:none;z-index:0;opacity:.5;
+  background-image:radial-gradient(rgba(255,255,255,.045) 1px,transparent 1px);
+  background-size:3px 3px;mix-blend-mode:overlay;
+}
+@media(min-width:520px){
+  body{padding:20px 0;align-items:center;background:radial-gradient(circle at 50% 30%,#15151c,#070709);}
+  #app{height:min(940px,calc(100dvh - 40px));min-height:auto;border-radius:40px;border:1px solid var(--stroke);box-shadow:var(--shadow);}
+}
+.scroll{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;padding:18px 16px 30px;position:relative;z-index:1;}
+.scroll.with-nav{padding-bottom:108px;}
+
+/* type */
+h1,h2,h3{font-family:var(--fdisp);margin:0;line-height:1.02;letter-spacing:-.02em;font-weight:800;}
+h1{font-size:32px;} h2{font-size:22px;} h3{font-size:18px;}
+.eyebrow{font-family:var(--fdisp);font-weight:700;letter-spacing:.18em;text-transform:uppercase;font-size:10.5px;color:var(--red);}
+.muted{color:var(--muted);} p{line-height:1.55;margin:0;color:var(--text);}
+.big-num{font-family:var(--fdisp);font-weight:800;}
+.hr{height:1px;background:var(--stroke);margin:14px 0;border:none;} .sp{height:13px;} .center{text-align:center;}
+
+/* buttons */
+.btn{font-family:var(--fdisp);font-weight:700;font-size:16px;border:none;border-radius:16px;padding:16px 18px;width:100%;
+  cursor:pointer;transition:transform .14s cubic-bezier(.2,.9,.3,1.3),box-shadow .2s,background .2s,opacity .2s;
+  display:inline-flex;align-items:center;justify-content:center;gap:9px;color:var(--text);position:relative;overflow:hidden;}
+.btn:active{transform:scale(.96);}
+.btn-red{background:var(--grad-red);color:#fff;box-shadow:0 10px 30px var(--redglow);}
+.btn-red::after{content:"";position:absolute;top:0;left:-60%;width:40%;height:100%;
+  background:linear-gradient(100deg,transparent,rgba(255,255,255,.35),transparent);transform:skewX(-18deg);animation:sheen 3.6s ease-in-out infinite;}
+@keyframes sheen{0%,60%{left:-60%}80%,100%{left:130%}}
+.btn-red:disabled{background:#26262d;box-shadow:none;color:var(--dim);cursor:not-allowed;}
+.btn-red:disabled::after{display:none;}
+.btn-black{background:var(--surface2);color:#fff;border:1px solid var(--stroke2);backdrop-filter:blur(8px);}
+.btn-ghost{background:transparent;color:#fff;border:1px solid var(--stroke2);}
+.btn-soft{background:var(--surface);color:#fff;border:1px solid var(--stroke);font-size:14px;padding:13px 14px;backdrop-filter:blur(8px);}
+.btn-sm{width:auto;font-size:13px;padding:11px 15px;border-radius:13px;box-shadow:none;}
+.row{display:flex;gap:9px;} .row>.btn{flex:1;} .wrap{flex-wrap:wrap;}
+body.in-tg .cta-primary{display:none;}
+
+/* glass panels */
+.panel{background:var(--grad-card);border:1px solid var(--stroke);border-radius:var(--radius);padding:18px;backdrop-filter:blur(14px);box-shadow:0 10px 30px rgba(0,0,0,.35);}
+.panel.soft{background:var(--surface);}
+.tile{background:var(--surface);border:1px solid var(--stroke);border-radius:18px;padding:15px;backdrop-filter:blur(10px);transition:transform .14s;}
+.tile:active{transform:scale(.99);}
+
+/* topbar */
+.topbar{display:flex;align-items:center;gap:11px;padding:2px 0 10px;}
+.topbar .back{width:42px;height:42px;border-radius:14px;border:1px solid var(--stroke2);background:var(--surface);color:#fff;font-size:18px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:0 0 auto;backdrop-filter:blur(10px);transition:transform .14s;}
+.topbar .back:active{transform:scale(.9);}
+.topbar h2{flex:1;font-size:20px;}
+
+/* floating nav */
+.bottomnav{position:absolute;left:14px;right:14px;bottom:calc(14px + env(safe-area-inset-bottom));height:66px;
+  background:rgba(20,20,26,.72);backdrop-filter:blur(22px) saturate(1.4);-webkit-backdrop-filter:blur(22px);
+  border:1px solid var(--stroke2);border-radius:24px;display:flex;padding:7px;z-index:40;box-shadow:0 14px 40px rgba(0,0,0,.55);}
+.bottomnav button{flex:1;background:none;border:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+  color:var(--dim);font-family:var(--fbody);font-weight:700;font-size:10px;cursor:pointer;border-radius:18px;transition:.2s;}
+.bottomnav button .ic{font-size:19px;line-height:1;transition:.2s;}
+.bottomnav button.active{color:#fff;background:var(--surface2);}
+.bottomnav button.active .ic{color:var(--red);transform:translateY(-1px);text-shadow:0 0 14px var(--redglow);}
+
+/* stats */
+.stats{display:flex;gap:8px;} .stats.s4>div{flex:1;}
+.stat{flex:1;background:var(--surface);border:1px solid var(--stroke);border-radius:18px;padding:13px 9px;text-align:center;backdrop-filter:blur(10px);}
+.stat .v{font-family:var(--fdisp);font-weight:800;font-size:21px;line-height:1;color:#fff;}
+.stat .l{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-top:6px;}
+.stat.red{background:var(--grad-red);border:none;box-shadow:0 10px 26px var(--redglow);} .stat.red .l{color:#ffffffcc;}
+.stat.ghost{background:transparent;border:1px solid var(--stroke2);} 
+
+/* progress */
+.bar{height:10px;background:rgba(255,255,255,.08);border-radius:99px;overflow:hidden;}
+.bar>i{display:block;height:100%;background:var(--grad-red);border-radius:99px;width:0;transition:width .9s cubic-bezier(.2,.8,.2,1);box-shadow:0 0 14px var(--redglow);}
+.bar.black>i{background:linear-gradient(90deg,#fff,#bdbdc7);box-shadow:none;} .bar.thin{height:6px;}
+
+/* hero balance card (Revolut-like) */
+.hero-card{position:relative;border-radius:26px;padding:22px;overflow:hidden;border:1px solid var(--stroke2);
+  background:linear-gradient(150deg,#1a1a22,#0d0d11);box-shadow:var(--shadow);}
+.hero-card::before{content:"";position:absolute;width:320px;height:320px;border-radius:50%;top:-160px;right:-120px;
+  background:radial-gradient(circle,rgba(255,59,67,.55),transparent 65%);filter:blur(8px);animation:floaty 7s ease-in-out infinite;}
+@keyframes floaty{0%,100%{transform:translate(0,0)}50%{transform:translate(-18px,16px)}}
+.hero-card .lbl{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);position:relative;}
+.hero-card .val{font-family:var(--fdisp);font-weight:800;font-size:46px;line-height:1;margin-top:8px;position:relative;}
+
+/* felt + cards */
+.felt{background:radial-gradient(circle at 50% 22%,#23121a 0,#0a0608 76%);border-radius:24px;padding:18px 14px;color:#fff;position:relative;
+  border:1px solid rgba(255,59,67,.22);box-shadow:inset 0 0 40px rgba(255,59,67,.06),0 16px 38px rgba(0,0,0,.5);overflow:hidden;}
+.felt .seatlabel{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#ffffff70;text-align:center;}
+.cardrow{display:flex;justify-content:center;gap:6px;min-height:78px;align-items:center;flex-wrap:wrap;perspective:900px;}
+.cardrow.sm{min-height:60px;}
+.pcard{width:52px;height:74px;background:linear-gradient(160deg,#fff,#eceaf0);border-radius:9px;border:1px solid #00000022;position:relative;flex:0 0 auto;
+  font-family:var(--fdisp);font-weight:800;box-shadow:0 6px 14px rgba(0,0,0,.45);user-select:none;}
+.pcard .r{position:absolute;top:4px;left:6px;font-size:16px;line-height:1;}
+.pcard .s{position:absolute;bottom:3px;right:5px;font-size:18px;line-height:1;}
+.pcard .c{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:25px;}
+.pcard.sm{width:40px;height:57px;} .pcard.sm .r{font-size:12px;}.pcard.sm .s{font-size:14px;}.pcard.sm .c{font-size:19px;}
+.pcard.xs{width:30px;height:43px;border-radius:6px;}.pcard.xs .r{font-size:10px;top:2px;left:3px;}.pcard.xs .s{display:none;}.pcard.xs .c{font-size:14px;}
+.pcard.red{color:var(--red2);} .pcard.black{color:#15151a;}
+.pcard.deal{animation:dealCard .42s both cubic-bezier(.2,.85,.25,1);}
+@keyframes dealCard{from{transform:translateY(46px) rotateX(40deg) scale(.8);opacity:0}to{transform:none;opacity:1}}
+.pcard.sel{outline:3px solid var(--red);outline-offset:2px;transform:translateY(-6px);box-shadow:0 10px 24px var(--redglow);}
+.pcard.danger{outline:3px solid var(--red);outline-offset:1px;animation:pulseDanger 1s ease infinite;}
+@keyframes pulseDanger{0%,100%{outline-color:var(--red);box-shadow:0 0 0 0 var(--redglow)}50%{outline-color:#ff9498;box-shadow:0 0 22px var(--redglow)}}
+.pcard.out{outline:3px solid #fff;outline-offset:1px;box-shadow:0 0 0 6px rgba(255,255,255,.18);}
+.pcard.dim{opacity:.22;filter:grayscale(1);}
+.pcard.tap{cursor:pointer;transition:transform .12s;} .pcard.tap:active{transform:scale(.92);}
+.empty-slot{width:52px;height:74px;border-radius:9px;border:1.5px dashed #ffffff44;background:#ffffff0d;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#ffffff55;font-size:22px;}
+.empty-slot.active{border-color:var(--red);color:var(--red);background:rgba(255,59,67,.14);}
+
+/* chips */
+.chiparea{display:flex;justify-content:center;align-items:flex-end;gap:5px;min-height:40px;}
+.chip{width:30px;height:30px;border-radius:50%;border:3px dashed #ffffffcc;display:flex;align-items:center;justify-content:center;color:#fff;font-size:9px;font-weight:800;flex:0 0 auto;box-shadow:0 3px 8px rgba(0,0,0,.5);}
+.chip.r{background:var(--grad-red);} .chip.b{background:#1b1b22;border-color:#ffffff55;} .chip.w{background:#fff;color:#15151a;border:3px dashed var(--red);}
+.chip.fly{position:fixed;z-index:120;pointer-events:none;}
+.potbox{text-align:center;margin:6px 0;}
+.potbox .lbl{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#ffffff80;}
+.potbox .amt{font-family:var(--fdisp);font-weight:800;font-size:26px;color:#fff;}
+.stacks{display:flex;justify-content:space-between;font-size:11px;color:#ffffffcc;margin-top:4px;}
+
+/* betting */
+.betgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;}
+.betbtn{border:1px solid var(--stroke2);background:var(--surface);border-radius:16px;padding:15px 6px;font-family:var(--fdisp);font-weight:700;font-size:14px;cursor:pointer;transition:.14s;text-align:center;color:#fff;backdrop-filter:blur(8px);}
+.betbtn:active{transform:scale(.95);} .betbtn.on{background:var(--grad-red);border-color:transparent;color:#fff;box-shadow:0 8px 22px var(--redglow);}
+.presets{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0;}
+.preset{border:1px solid var(--stroke2);border-radius:99px;padding:8px 13px;font-weight:700;font-size:13px;cursor:pointer;background:var(--surface);color:#fff;}
+.preset.on{background:#fff;color:#15151a;border-color:#fff;}
+.betsize{font-family:var(--fdisp);font-weight:800;font-size:40px;text-align:center;line-height:1;color:#fff;}
+input[type=range]{-webkit-appearance:none;width:100%;height:8px;border-radius:99px;background:rgba(255,255,255,.12);outline:none;margin:14px 0;}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:30px;height:30px;border-radius:50%;background:var(--grad-red);border:4px solid #14141a;box-shadow:0 4px 14px var(--redglow);cursor:pointer;}
+input[type=range]::-moz-range-thumb{width:30px;height:30px;border-radius:50%;background:var(--red);border:4px solid #14141a;cursor:pointer;}
+
+/* coach */
+.coach{display:flex;gap:11px;align-items:flex-start;}
+.bubble{background:var(--surface);border:1px solid var(--stroke2);border-radius:16px;padding:12px 14px;position:relative;font-size:14px;line-height:1.5;flex:1;backdrop-filter:blur(10px);color:var(--text);}
+.bubble:before{content:"";position:absolute;top:15px;left:-8px;width:13px;height:13px;background:var(--surface);border-left:1px solid var(--stroke2);border-bottom:1px solid var(--stroke2);transform:rotate(45deg);}
+.coach.glad svg{animation:nod .6s ease;} @keyframes nod{0%,100%{transform:none}30%{transform:translateY(-5px) rotate(-5deg)}60%{transform:rotate(4deg)}}
+
+/* feedback */
+.fb{border-radius:18px;padding:16px;margin-top:13px;border:1px solid;animation:fbin .35s cubic-bezier(.2,1.3,.4,1);}
+@keyframes fbin{from{transform:scale(.96) translateY(8px);opacity:0}to{transform:none;opacity:1}}
+.fb.ok{background:rgba(255,255,255,.05);border-color:var(--stroke2);} .fb.bad{background:rgba(255,59,67,.10);border-color:rgba(255,59,67,.4);}
+.fb .ttl{font-family:var(--fdisp);font-weight:800;font-size:17px;display:flex;align-items:center;gap:8px;color:#fff;}
+.fb.bad .ttl{color:var(--red);}
+.xp{display:inline-block;background:#fff;color:#15151a;font-weight:800;font-family:var(--fdisp);padding:6px 14px;border-radius:99px;margin-top:8px;}
+.evloss{display:inline-block;background:var(--grad-red);color:#fff;font-weight:800;font-family:var(--fdisp);padding:6px 14px;border-radius:99px;margin-top:8px;}
+.pulseCorrect{animation:pulseCorrect .55s ease;} @keyframes pulseCorrect{0%{box-shadow:0 0 0 0 var(--redglow)}100%{box-shadow:0 0 0 18px rgba(255,59,67,0)}}
+.shakeWrong{animation:shakeWrong .4s;} @keyframes shakeWrong{0%,100%{transform:none}20%{transform:translateX(-7px)}40%{transform:translateX(7px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)}}
+
+/* verdict */
+.vblock{border-left:2px solid var(--red);padding:2px 0 2px 12px;margin:12px 0;}
+.vblock .k{font-family:var(--fdisp);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--red);}
+.vblock .v{margin-top:3px;font-size:14.5px;line-height:1.5;color:var(--text);}
+.mathrow{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--stroke);font-size:14px;color:var(--text);}
+.mathrow b{font-family:var(--fdisp);color:#fff;}
+
+/* options */
+.opt{display:flex;align-items:center;gap:12px;border:1px solid var(--stroke);background:var(--surface);border-radius:16px;padding:14px;cursor:pointer;transition:.16s;font-weight:700;margin-bottom:9px;color:#fff;backdrop-filter:blur(8px);}
+.opt:active{transform:scale(.98);} .opt.on{border-color:var(--red);background:rgba(255,59,67,.12);box-shadow:0 8px 24px rgba(255,59,67,.18);}
+.opt .ic{font-size:21px;} .opt small{display:block;color:var(--muted);font-weight:500;font-size:12px;margin-top:2px;}
+.opt .chk{margin-inline-start:auto;width:24px;height:24px;border-radius:50%;border:1px solid var(--stroke2);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;}
+.opt.on .chk{background:var(--grad-red);border-color:transparent;}
+
+/* grid + navcards */
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.navcard{background:var(--surface);border:1px solid var(--stroke);border-radius:20px;padding:15px;cursor:pointer;transition:transform .16s,box-shadow .2s,border-color .2s;position:relative;overflow:hidden;backdrop-filter:blur(10px);animation:rise .5s both;}
+.navcard:active{transform:scale(.96);} .navcard:hover{border-color:var(--stroke2);}
+.navcard .ic{font-size:22px;} .navcard .t{font-family:var(--fdisp);font-weight:700;font-size:15px;margin-top:9px;color:#fff;} .navcard .d{font-size:11px;color:var(--muted);margin-top:2px;}
+.navcard.big{grid-column:span 2;background:var(--grad-red);border:none;box-shadow:0 16px 40px var(--redglow);} .navcard.big .d{color:#ffffffd0;} .navcard.big .t{font-size:19px;}
+.navcard.big::after{content:"";position:absolute;width:200px;height:200px;border-radius:50%;right:-60px;bottom:-90px;background:rgba(255,255,255,.14);}
+.navcard.dark{background:linear-gradient(160deg,#16161d,#0c0c10);}
+.grid .navcard:nth-child(1){animation-delay:.02s}.grid .navcard:nth-child(2){animation-delay:.06s}.grid .navcard:nth-child(3){animation-delay:.1s}.grid .navcard:nth-child(4){animation-delay:.14s}.grid .navcard:nth-child(5){animation-delay:.18s}.grid .navcard:nth-child(6){animation-delay:.22s}.grid .navcard:nth-child(7){animation-delay:.26s}
+@keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+
+/* tags / pills */
+.chiprow{display:flex;flex-wrap:wrap;gap:7px;}
+.tag{border:1px solid var(--stroke2);background:var(--surface);border-radius:99px;padding:9px 14px;font-weight:700;font-size:13px;cursor:pointer;transition:.14s;color:#fff;}
+.tag:active{transform:scale(.95);} .tag.on{background:#fff;color:#15151a;border-color:#fff;} .tag.good{background:var(--grad-red);border-color:transparent;color:#fff;} .tag.wrongpick{background:rgba(255,59,67,.12);border-color:var(--red);color:var(--red);}
+.pill{display:inline-flex;align-items:center;gap:6px;background:var(--surface2);color:#fff;border:1px solid var(--stroke);border-radius:99px;padding:6px 12px;font-weight:700;font-size:12px;font-family:var(--fdisp);} .pill.red{background:var(--grad-red);border:none;box-shadow:0 6px 16px var(--redglow);} .pill.ghost{background:transparent;border:1px solid var(--stroke2);}
+
+/* timeline */
+.timeline{display:flex;gap:6px;margin:12px 0;}
+.tl-step{flex:1;text-align:center;padding:10px 4px;border-radius:13px;border:1px solid var(--stroke);font-family:var(--fdisp);font-weight:700;font-size:12px;cursor:pointer;background:var(--surface);color:#fff;transition:.14s;}
+.tl-step.on{background:var(--grad-red);border-color:transparent;box-shadow:0 8px 20px var(--redglow);} .tl-step.done{border-color:var(--stroke2);}
+
+/* meter */
+.meter{height:14px;border-radius:99px;background:linear-gradient(90deg,#2a2a33,var(--red));position:relative;overflow:hidden;}
+.meter>i{position:absolute;top:0;right:0;bottom:0;background:rgba(255,255,255,.10);width:100%;transition:width .9s cubic-bezier(.2,.8,.2,1);}
+
+/* matrix */
+.matrix{display:grid;grid-template-columns:repeat(13,1fr);gap:2px;}
+.rcell{aspect-ratio:1;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:800;font-family:var(--fdisp);cursor:pointer;background:rgba(255,255,255,.05);color:#9a9aa6;border:1px solid transparent;transition:.08s;user-select:none;}
+.rcell.fold{background:rgba(255,255,255,.04);color:#55555f;} .rcell.open{background:var(--grad-red);color:#fff;} .rcell.premium{background:#fff;color:#15151a;} .rcell.mixed{background:transparent;border:1px solid var(--red);color:var(--red);}
+.rcell.on{outline:2px solid #fff;outline-offset:-2px;} .rcell.hit{background:#fff;color:#15151a;} .rcell.miss{background:transparent;border:1px dashed var(--red);}
+.mlegend{display:flex;flex-wrap:wrap;gap:10px;font-size:11px;margin-top:10px;color:var(--muted);}
+.mlegend span{display:inline-flex;align-items:center;gap:5px;} .mlegend i{width:13px;height:13px;border-radius:4px;display:inline-block;}
+
+/* blog */
+.article{border:1px solid var(--stroke);border-radius:20px;padding:0;margin-bottom:13px;cursor:pointer;transition:transform .16s,border-color .2s;background:var(--surface);overflow:hidden;backdrop-filter:blur(10px);animation:rise .5s both;}
+.article:active{transform:scale(.98);} .article:hover{border-color:var(--stroke2);}
+.article .cover{height:96px;position:relative;display:flex;align-items:flex-end;padding:14px;background:linear-gradient(150deg,#1c1c25,#0d0d12);overflow:hidden;}
+.article .cover::before{content:"";position:absolute;width:200px;height:200px;border-radius:50%;top:-110px;right:-50px;background:radial-gradient(circle,rgba(255,59,67,.5),transparent 65%);}
+.article .cover .emoji{font-size:34px;position:relative;}
+.article .body{padding:15px;}
+.article .src{font-size:11px;color:var(--red);font-weight:700;letter-spacing:.03em;}
+.article h3{margin-top:7px;color:#fff;} .article .ex{color:var(--muted);font-size:13px;margin-top:7px;line-height:1.5;}
+.readmeta{display:flex;gap:8px;margin-top:11px;}
+.readmeta .pill{font-size:10.5px;padding:5px 10px;}
+.longread h3{margin:20px 0 8px;font-size:19px;color:#fff;}
+.longread p{margin-top:12px;font-size:15.5px;line-height:1.65;color:#dcdce2;}
+.longread .quote{border-left:2px solid var(--red);padding:8px 0 8px 14px;margin:16px 0;color:#fff;font-style:italic;}
+.longread .kicker{background:var(--surface);border:1px solid var(--stroke);border-radius:14px;padding:13px 15px;margin:16px 0;font-size:14px;}
+.longread .kicker b{color:var(--red);font-family:var(--fdisp);}
+
+/* map */
+.mapwrap{position:relative;border-radius:20px;overflow:hidden;border:1px solid var(--stroke2);background:#0d0d12;box-shadow:var(--shadow);}
+.mapwrap svg{display:block;width:100%;height:240px;}
+#clubMapEl{width:100%;height:330px;
+  background:
+    radial-gradient(80% 60% at 18% 30%,rgba(255,59,67,.16),transparent 60%),
+    radial-gradient(70% 60% at 85% 80%,rgba(120,120,160,.10),transparent 60%),
+    linear-gradient(160deg,#0d0d14,#08080b);
+  background-color:#0a0a0f;}
+.mapwrap::after{content:"";position:absolute;inset:0;pointer-events:none;z-index:401;
+  box-shadow:inset 0 0 60px rgba(255,59,67,.10),inset 0 0 0 1px rgba(255,255,255,.05);border-radius:20px;}
+.map-fallback{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+  text-align:center;padding:24px;color:var(--muted);font-size:13px;z-index:5;}
+.map-fallback .mf-ic{font-size:30px;}
+/* затемняем подложку Яндекс.Карты под тёмную тему приложения */
+#clubMapEl [class*="ground-pane"]{filter:invert(1) hue-rotate(180deg) brightness(.92) contrast(.96) saturate(.82);}
+#clubMapEl [class*="copyrights-pane"]{filter:none;}
+/* тёмные балуны в стиле приложения */
+[class*="-balloon__layout"]{background:#15151e!important;color:var(--text)!important;border:1px solid var(--stroke2)!important;border-radius:16px!important;box-shadow:0 16px 44px rgba(0,0,0,.6)!important;overflow:hidden!important;}
+[class*="-balloon__content"]{background:transparent!important;color:var(--text)!important;font-family:var(--fbody)!important;margin:0!important;padding:13px 15px 14px!important;}
+[class*="-balloon-content__header"]{font-family:var(--fdisp)!important;font-weight:800!important;color:#fff!important;margin-bottom:6px!important;font-size:15px!important;}
+[class*="-balloon__tail"]{display:none!important;}
+[class*="-balloon__close"]{opacity:.85!important;}
+[class*="-balloon__close-button-icon"]{filter:invert(1)!important;}
+.club-pop .pname{font-family:var(--fdisp);font-weight:800;font-size:15px;color:#fff;margin-bottom:3px;}
+.club-pop .ptype{color:var(--red);font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;margin-bottom:8px;}
+.club-pop .prow{display:flex;gap:7px;margin-top:5px;color:#cfcfd6;}
+.club-pop .prow .ico{flex:0 0 auto;opacity:.7;}
+.ypin{display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;background:var(--grad-red);color:#fff;font-family:var(--fdisp);font-weight:800;font-size:13px;box-shadow:0 5px 14px rgba(255,59,67,.6),0 0 0 2px #fff;cursor:pointer;transform:translate(-50%,-50%);}
+.ypin.act{box-shadow:0 7px 20px rgba(255,59,67,.95),0 0 0 3px #fff;animation:pinpulse 1.1s ease-in-out infinite;}
+@keyframes pinpulse{0%,100%{transform:translate(-50%,-50%) scale(1)}50%{transform:translate(-50%,-50%) scale(1.16)}}
+
+/* ===== running ticker (бегущая строка цитат) ===== */
+.ticker{position:relative;overflow:hidden;border-radius:18px;padding:15px 0;border:1px solid var(--stroke);
+  background:linear-gradient(120deg,rgba(255,59,67,.16),rgba(255,255,255,.03) 55%,rgba(255,59,67,.10));
+  box-shadow:0 12px 34px rgba(0,0,0,.4),inset 0 0 0 1px rgba(255,255,255,.04);}
+.ticker::before,.ticker::after{content:"";position:absolute;top:0;bottom:0;width:54px;z-index:2;pointer-events:none;}
+.ticker::before{left:0;background:linear-gradient(90deg,#0b0b10,rgba(11,11,16,0));}
+.ticker::after{right:0;background:linear-gradient(270deg,#0b0b10,rgba(11,11,16,0));}
+.ticker-track{display:inline-flex;align-items:center;white-space:nowrap;will-change:transform;animation:tickerflow 70s linear infinite;}
+@keyframes tickerflow{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+.tk-item{font-family:var(--fdisp);font-weight:800;font-size:16px;letter-spacing:-.01em;color:#fff;padding:0 4px;
+  text-shadow:0 2px 14px rgba(0,0,0,.35);}
+.tk-dot{display:inline-flex;align-items:center;justify-content:center;color:var(--red);font-size:13px;margin:0 18px;
+  text-shadow:0 0 12px var(--redglow);transform:translateY(-1px);}
+
+.pin{cursor:pointer;transition:transform .15s;transform-origin:center bottom;}
+.pin:hover,.pin.act{transform:scale(1.3);}
+.club{display:flex;gap:12px;align-items:flex-start;border:1px solid var(--stroke);border-radius:16px;padding:14px;margin-top:9px;cursor:pointer;transition:.14s;background:var(--surface);backdrop-filter:blur(8px);}
+.club:active{transform:scale(.99);} .club.act{border-color:var(--red);background:rgba(255,59,67,.10);}
+.club .no{width:28px;height:28px;border-radius:50%;background:var(--grad-red);color:#fff;font-family:var(--fdisp);font-weight:800;display:flex;align-items:center;justify-content:center;font-size:13px;flex:0 0 auto;box-shadow:0 6px 16px var(--redglow);}
+.club .meta{font-size:12px;color:var(--muted);margin-top:2px;} .club b{color:#fff;}
+
+/* deck */
+.deck{display:grid;grid-template-columns:repeat(8,1fr);gap:4px;margin-top:10px;}
+.suitlabel{font-family:var(--fdisp);font-weight:800;font-size:15px;margin:10px 0 4px;}
+
+/* overlay / sheet */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);z-index:100;display:flex;align-items:flex-end;justify-content:center;opacity:0;pointer-events:none;transition:opacity .25s;}
+.overlay.show{opacity:1;pointer-events:auto;}
+.sheet{width:100%;max-width:var(--max);background:linear-gradient(180deg,#16161d,#0c0c11);border:1px solid var(--stroke2);border-bottom:none;border-radius:28px 28px 0 0;padding:6px 18px 28px;transform:translateY(40px);transition:transform .3s cubic-bezier(.2,.8,.2,1);max-height:92vh;overflow-y:auto;box-shadow:0 -20px 60px rgba(0,0,0,.6);}
+.overlay.show .sheet{transform:none;}
+.grab{width:42px;height:5px;border-radius:99px;background:var(--stroke2);margin:8px auto 14px;}
+.dots{display:flex;gap:6px;justify-content:center;margin:16px 0;}
+.dots i{width:7px;height:7px;border-radius:99px;background:var(--stroke2);transition:.25s;} .dots i.on{background:var(--red);width:22px;box-shadow:0 0 12px var(--redglow);}
+
+.term{color:var(--red);border-bottom:1px dotted var(--red);cursor:pointer;font-weight:700;}
+.legal{font-size:11px;color:var(--dim);text-align:center;padding:16px 6px;}
+.fade{animation:fade .45s ease;} @keyframes fade{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.slidein{animation:slidein .35s ease;} @keyframes slidein{from{opacity:0;transform:translateX(24px)}to{opacity:1;transform:none}}
+label.fld{font-weight:700;font-size:11px;display:block;margin:12px 0 6px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;}
+select{font-family:var(--fbody);font-weight:600;border:1px solid var(--stroke2);border-radius:13px;padding:12px;width:100%;font-size:14px;background:#15151c;color:#fff;}
+.segrow{display:flex;gap:6px;flex-wrap:wrap;}
+.seg{border:1px solid var(--stroke2);border-radius:12px;padding:9px 13px;font-weight:700;font-size:13px;cursor:pointer;background:var(--surface);color:#fff;transition:.14s;}
+.seg:active{transform:scale(.96);} .seg.on{border-color:transparent;background:var(--grad-red);color:#fff;box-shadow:0 6px 16px var(--redglow);}
+
+
+/* ===== 3D animated raven (no circle) ===== */
+.rvn{overflow:visible;display:block;transform-style:preserve-3d;animation:rvnYaw 6.5s ease-in-out infinite;}
+@keyframes rvnYaw{0%,100%{transform:perspective(320px) rotateY(-12deg)}50%{transform:perspective(320px) rotateY(12deg)}}
+.rvn .body{transform-box:fill-box;transform-origin:50% 62%;animation:rvnFloat 3.4s ease-in-out infinite;}
+@keyframes rvnFloat{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-3px) rotate(2deg)}}
+.rvn .wing{transform-box:fill-box;transform-origin:60% 36%;animation:rvnWing 2.2s ease-in-out infinite;}
+@keyframes rvnWing{0%,100%{transform:rotate(3deg)}50%{transform:rotate(-16deg)}}
+.rvn .eye{transform-box:fill-box;transform-origin:center;animation:rvnBlink 4.8s infinite;}
+@keyframes rvnBlink{0%,93%,100%{transform:scaleY(1)}96%{transform:scaleY(.1)}}
+.rvn .accent{animation:rvnGlow 3s ease-in-out infinite;}
+@keyframes rvnGlow{0%,100%{opacity:.8}50%{opacity:1}}
+
+/* ===== interactive coach card (home) ===== */
+.coachcard{position:relative;display:flex;align-items:center;gap:14px;padding:18px;border-radius:22px;border:1px solid var(--stroke);background:linear-gradient(150deg,rgba(255,255,255,.08),rgba(255,255,255,.02));overflow:hidden;}
+.coachcard::before{content:"";position:absolute;width:220px;height:220px;border-radius:50%;left:-90px;bottom:-120px;background:radial-gradient(circle,rgba(255,59,67,.4),transparent 65%);}
+.coachcard .bird{flex:0 0 auto;position:relative;filter:drop-shadow(0 12px 22px rgba(255,59,67,.35));}
+.coachcard .say{position:relative;flex:1;min-width:0;}
+.coachcard .say .quote{font-family:var(--fdisp);font-weight:800;font-size:18px;line-height:1.22;color:#fff;}
+.coachcard .cyc{margin-top:11px;font-size:12px;color:var(--muted);display:inline-flex;gap:7px;align-items:center;cursor:pointer;border:1px solid var(--stroke2);border-radius:99px;padding:7px 13px;background:transparent;transition:.14s;}
+.coachcard .cyc:active{transform:scale(.94);} .coachcard .cyc:hover{color:#fff;border-color:var(--red);}
+.phrasefade{animation:phraseIn .42s ease;} @keyframes phraseIn{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
+
+/* ===== analyzer charts ===== */
+.chartcard{background:var(--surface);border:1px solid var(--stroke);border-radius:18px;padding:16px;margin-top:12px;}
+.eqbar{height:34px;border-radius:11px;background:rgba(255,255,255,.06);position:relative;overflow:hidden;margin-bottom:11px;}
+.eqbar>i{position:absolute;left:0;top:0;bottom:0;border-radius:11px;width:0;transition:width 1.05s cubic-bezier(.2,.8,.2,1);}
+.eqbar.eq>i{background:var(--grad-red);box-shadow:0 0 18px var(--redglow);} .eqbar.req>i{background:linear-gradient(90deg,#5a5a64,#cfcfd6);}
+.eqbar .lab{position:absolute;left:12px;top:0;bottom:0;display:flex;align-items:center;font-size:12px;font-weight:700;color:#fff;z-index:2;}
+.eqbar .val{position:absolute;right:12px;top:0;bottom:0;display:flex;align-items:center;font-family:var(--fdisp);font-weight:800;z-index:2;color:#fff;}
+.gaugewrap{display:flex;align-items:center;gap:14px;}
+.gaugewrap .glabel{font-size:12px;color:var(--muted);} .gaugewrap .gnum{font-family:var(--fdisp);font-weight:800;font-size:26px;color:#fff;}
+
+/* ===== fixes: cards never overlap; ten reads as 10 ===== */
+.felt .cardrow{flex-wrap:nowrap;}
+.felt .pcard{width:46px;height:66px;} .felt .pcard .r{font-size:13px;left:5px;top:4px;} .felt .pcard .c{font-size:21px;} .felt .pcard .s{font-size:15px;}
+.felt .empty-slot{width:46px;height:66px;}
+.felt .pcard.sm{width:38px;height:54px;}
+
+
+.coachcard{cursor:pointer;transition:transform .14s;}
+.coachcard:active{transform:scale(.99);}
+.coachcard .hint{font-size:11px;color:var(--dim);margin-top:11px;letter-spacing:.01em;}
+.coachcard .hint::before{content:"↻  ";color:var(--red);font-weight:700;}
+.rvn .body{transform-origin:50% 55%;}
+
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="screen" class="scroll"></div>
+      <nav class="bottomnav" id="bottomnav" style="display:none">
+    <button data-tab="home" onclick="go('home')"><span class="ic">◆</span><span>Тренинг</span></button>
+    <button data-tab="analyzer" onclick="go('analyzer')"><span class="ic">⌕</span><span>Анализ</span></button>
+    <button data-tab="blog" onclick="go('blog')"><span class="ic">▤</span><span>Журнал</span></button>
+    <button data-tab="map" onclick="go('map')"><span class="ic">◎</span><span>Клубы</span></button>
+    <button data-tab="profile" onclick="go('profile')"><span class="ic">●</span><span>Профиль</span></button>
+  </nav>
+</div>
+<div class="overlay" id="overlay" onclick="if(event.target===this)closeSheet()"><div class="sheet" id="sheet"></div></div>
+
+<script>
+/* ============================================================================
+   1. TELEGRAM INIT (safe mock — работает и без Telegram)            [TG]
+   ============================================================================ */
+const tg = window.Telegram?.WebApp;
+const inTG = !!(tg && tg.platform && tg.platform !== 'unknown');
+if (tg) {
+  try {
+    tg.ready(); tg.expand();
+    tg.disableVerticalSwipes && tg.disableVerticalSwipes();
+    tg.setHeaderColor && tg.setHeaderColor('#08080B');
+    tg.setBackgroundColor && tg.setBackgroundColor('#08080B');
+  } catch(e){}
+  // [TG] язык клиента: tg.initDataUnsafe?.user?.language_code
+  // [API] синхронизация прогресса/утечек: fetch(API, {headers:{auth:tg.initData}})
+}
+if (inTG) document.body.classList.add('in-tg');
+let mainAction=null, backAction=null;
+if (tg){ tg.MainButton.onClick(()=>mainAction&&mainAction()); tg.BackButton.onClick(()=>backAction&&backAction()); }
+function setMain(label,fn){ mainAction=fn; if(inTG){try{tg.MainButton.setText(label);tg.MainButton.color='#D62828';tg.MainButton.show();}catch(e){}} }
+function hideMain(){ mainAction=null; if(inTG){try{tg.MainButton.hide();}catch(e){}} }
+function setBack(fn){ backAction=fn; if(inTG){try{fn?tg.BackButton.show():tg.BackButton.hide();}catch(e){}} }
+function hp(k){ if(tg&&tg.HapticFeedback){try{
+  if(k==='ok')tg.HapticFeedback.notificationOccurred('success');
+  else if(k==='err')tg.HapticFeedback.notificationOccurred('error');
+  else tg.HapticFeedback.impactOccurred('light');}catch(e){}} }
+
+/* ============================================================================
+   2. КАРТЫ — модель и утилиты
+   ============================================================================ */
+const RANKS=['2','3','4','5','6','7','8','9','T','J','Q','K','A'];
+const SUITS=['s','h','d','c'];
+const SUIT_CH={s:'♠',h:'♥',d:'♦',c:'♣'};
+const RU_RANK={A:'туз',K:'король',Q:'дама',J:'валет',T:'десятка'};
+function rv(r){ return RANKS.indexOf(r)+2; }                 // 2..14
+function suitColor(s){ return (s==='h'||s==='d')?'red':'black'; }
+function cardStr(c){ return c.r+c.s; }
+function parse(str){ return {r:str[0],s:str[1]}; }
+
+/* ============================================================================
+   3. СЛОВАРЬ (рус.)  — клик / долгое нажатие
+   ============================================================================ */
+const dict={
+ 'Ауты':{d:'Карты, которые усиливают твою руку до, скорее всего, выигрышной.',ex:'Флеш-дро = 9 аутов.',tip:'Правило 2 и 4: ауты ×2 (одна улица) или ×4 (две улицы).'},
+ 'Эквити':{d:'Твоя доля банка — как часто рука выигрывает в среднем против диапазона оппонента.',ex:'Флеш-дро на флопе ≈ 35% к риверу.',tip:'Сравнивай эквити со шансами банка.'},
+ 'Шансы банка':{d:'Цена колла относительно итогового банка. Дают минимально нужное эквити.',ex:'Банк 100, ставка 50 → нужно ~25%.',tip:'колл ÷ итоговый банк = нужное эквити.'},
+ 'Диапазон':{d:'Все руки, которые игрок может иметь в этой ситуации. Точных карт мы не знаем.',ex:'Открытие с BTN ≈ 45% рук.',tip:'Думай группами рук, а не одной комбинацией.'},
+ 'Префлоп':{d:'Улица до флопа: на руках только две карманные карты.',ex:'Открытие, 3-бет, защита блайндов.',tip:'Позиция важнее, чем кажется.'},
+ 'Флоп':{d:'Первые три общие карты.',ex:'K♠ 7♦ 2♠.',tip:'Сначала читай структуру доски.'},
+ 'Терн':{d:'Четвёртая общая карта.',ex:'Часто меняет силу дро.',tip:'Новая карта = новый расклад эквити.'},
+ 'Ривер':{d:'Пятая, последняя общая карта. Дро больше нет.',ex:'Решение строится на готовой руке.',tip:'На ривере думай о диапазоне ставок оппонента.'},
+ 'C-bet':{d:'Continuation bet — ставка префлоп-агрессора на флопе.',ex:'Маленький c-bet на сухой высокой доске.',tip:'Сайзинг зависит от текстуры доски.'},
+ '3-bet':{d:'Повторный рейз поверх открытия.',ex:'CO open → BTN 3-bet.',tip:'Бывает на вэлью и как блеф.'},
+ 'Вэлью-бет':{d:'Ставка с сильной рукой, которую коллируют более слабые.',ex:'Топ-пара топ-кикер на сухой доске.',tip:'Спроси: какие худшие руки заплатят?'},
+ 'Блеф':{d:'Ставка со слабой рукой, чтобы заставить сбросить лучшую.',ex:'Барелинг на пугающем ривере.',tip:'Блефуй против тех, кто умеет фолдить.'},
+ 'Полублеф':{d:'Ставка с дро: можно выиграть сразу или собрать руку.',ex:'Ставка с флеш-дро на флопе.',tip:'Совмещает фолд-эквити и аутсы.'},
+ 'Флеш-дро':{d:'Четыре карты одной масти — нужна ещё одна.',ex:'A♠9♠ на K♠7♠2♦.',tip:'9 аутов ≈ 18% / 35%.'},
+ 'Стрит-дро':{d:'Четыре карты к стриту.',ex:'T9 на 8-7-2.',tip:'Двустороннее = 8 аутов.'},
+ 'Гатшот':{d:'Внутреннее стрит-дро — не хватает одной карты в середине.',ex:'KQ на T-8-3 (нужен J).',tip:'4 аута ≈ 8% / 16%.'},
+ 'Оверпара':{d:'Карманная пара выше всех карт на доске.',ex:'AA на K-9-8.',tip:'Сильна, но это всё ещё одна пара.'},
+ 'Топ-пара':{d:'Пара со старшей картой доски.',ex:'A9 на 9-высокой доске.',tip:'Контроль банка, а не авто-олл-ин.'},
+ 'Кикер':{d:'Боковая карта, решающая при равных парах.',ex:'AK vs AQ на тузе — решает K/Q.',tip:'Слабый кикер = осторожнее на ривере.'},
+ 'Мокрая доска':{d:'Много дро и связок — опасно для одной пары.',ex:'9♠8♠7♦.',tip:'Контролируй размер банка.'},
+ 'Сухая доска':{d:'Разрозненная, без дро.',ex:'K♣7♦2♠ радуга.',tip:'Хорошо подходит для c-bet.'},
+ 'Монотонная доска':{d:'Три карты одной масти.',ex:'K♠9♠2♠.',tip:'Флеши уже возможны — будь аккуратен.'},
+ 'Спаренная доска':{d:'На доске есть пара.',ex:'K♣K♦4♠.',tip:'Возможны трипсы и фулл-хаусы.'},
+ 'Натс':{d:'Лучшая возможная рука в данной ситуации.',ex:'Старший флеш на монотонной доске.',tip:'Даже натсам нужен правильный сайзинг.'},
+ 'Тильт':{d:'Эмоциональная игра, ведущая к ошибкам.',ex:'Отыгрыш после бэдбита.',tip:'По Анджело: лучшее действие в тильте — встать.'},
+ 'EV':{d:'Ожидаемая ценность решения в долгосроке.',ex:'Плюсовый колл имеет +EV.',tip:'Цель — копить +EV решения, а не результат одной раздачи.'},
+ 'MDF':{d:'Minimum Defense Frequency — как часто надо защищаться, чтобы блеф не был автоприбыльным.',ex:'Против ставки 75% MDF ≈ 57%.',tip:'MDF = банк ÷ (банк + ставка).'},
+};
+
+/* ============================================================================
+   4. ПОКЕРНАЯ ЛИТЕРАТURA — концепции из профессиональных книг          [контент]
+   ============================================================================ */
+const LIT={
+ ftop:{book:'Дэвид Склански — «Теория покера»',idea:'Фундаментальная теорема покера'},
+ potodds:{book:'Дэвид Склански — «Теория покера»',idea:'Шансы банка и подразумеваемые шансы'},
+ math:{book:'Чен и Анкенман — «The Mathematics of Poker»',idea:'Дисперсия и матожидание'},
+ gto:{book:'Майкл Асеведо — «Modern Poker Theory»',idea:'Диапазоны и баланс'},
+ mdf:{book:"Мэтью Янда — «Applications of No-Limit Hold'em»",idea:'MDF и частоты защиты'},
+ cbet:{book:'Эд Миллер — «The Course»',idea:'Сайзинг c-bet по текстуре'},
+ tilt:{book:'Томми Анджело — «Elements of Poker»',idea:'Контроль тильта'},
+ harr:{book:"Дэн Харрингтон — «Harrington on Hold'em»",idea:'Дисциплина и стек-менеджмент'},
+};
+function citeLit(k){ const l=LIT[k]; return l?`<span class="muted" style="font-size:12px">📖 ${l.book} — ${l.idea}.</span>`:''; }
+
+/* ============================================================================
+   5. ДИАПАЗОНЫ — нотация + раскрытие + матрица позиций
+   ============================================================================ */
+// нотация: "22+", "ATs+", "A8o+", "K7s+", "KQs", "JTs", "T9s", "98s", "AKo"
+function expandToken(tok,set){
+  const pairsAll=()=>{for(let i=12;i>=0;i--)set.add(RANKS[i]+RANKS[i]);};
+  if(/^\d\d\+$|^[2-9TJQKA]{2}\+$/.test(tok) && tok[0]===tok[1]){ // pair+
+    const from=rv(tok[0]); for(let v=from;v<=14;v++){const r=RANKS[v-2];set.add(r+r);} return;
+  }
+  if(tok.length===2 && tok[0]===tok[1]){ set.add(tok); return; } // single pair
+  const m=tok.match(/^([2-9TJQKA])([2-9TJQKA])(s|o)(\+?)$/);
+  if(m){ const hi=m[1],lo=m[2],so=m[3],plus=m[4];
+    if(plus){ const hv=rv(hi); for(let v=rv(lo);v<hv;v++){set.add(hi+RANKS[v-2]+so);} }
+    else set.add(hi+lo+so);
+    return;
+  }
+}
+function buildRange(tokens){ const set=new Set(); tokens.forEach(t=>expandToken(t,set)); return set; }
+const OPEN_RANGES={
+ UTG:buildRange(['22+','AJs+','KQs','AQo+']),
+ MP:buildRange(['22+','ATs+','KJs+','QJs','JTs','AJo+','KQo']),
+ CO:buildRange(['22+','A8s+','KTs+','QTs+','JTs','T9s','ATo+','KJo+','QJo']),
+ BTN:buildRange(['22+','A2s+','K7s+','Q8s+','J8s+','T8s+','98s','87s','A8o+','KTo+','QTo+','JTo']),
+ SB:buildRange(['22+','A2s+','K8s+','Q9s+','J9s+','T9s','A9o+','KTo+','QTo+']),
+ BB:buildRange(['22+','A2s+','K5s+','Q7s+','J7s+','T7s+','97s+','86s+','75s+','65s','54s','A2o+','K9o+','Q9o+','J9o+','T9o']),
+};
+function getOpenRange(pos){ return OPEN_RANGES[pos]||OPEN_RANGES.BTN; }
+function handCode(c1,c2){
+  let a=c1,b=c2; if(rv(a.r)<rv(b.r)){[a,b]=[b,a];}
+  if(a.r===b.r) return a.r+b.r;
+  return a.r+b.r+(a.s===b.s?'s':'o');
+}
+function isHandInRange(c1,c2,pos){ return getOpenRange(pos).has(handCode(c1,c2)); }
+// для матрицы 13x13: классификация ячейки
+function cellClass(i,j,pos){
+  const hi=RANKS[12-Math.min(i,j)], lo=RANKS[12-Math.max(i,j)];
+  const code = i===j ? hi+hi : (i<j ? hi+lo+'s' : RANKS[12-i]+RANKS[12-j]+'o');
+  // нормализуем: верхняя матрица suited, нижняя offsuit, диагональ пары
+  const code2 = i===j? RANKS[12-i]+RANKS[12-i] : (i<j? RANKS[12-i]+RANKS[12-j]+'s' : RANKS[12-j]+RANKS[12-i]+'o');
+  const inR=getOpenRange(pos).has(code2);
+  const isPair=i===j;
+  const premium = isPair && rv(RANKS[12-i])>=12; // QQ+ , also AKs handled below
+  if(code2==='AKs'||code2==='AKo') return inR?'premium':'fold';
+  if(premium && inR) return 'premium';
+  if(inR) return 'open';
+  return 'fold';
+}
+function cellLabel(i,j){ if(i===j)return RANKS[12-i]+RANKS[12-i]; if(i<j)return RANKS[12-i]+RANKS[12-j]+'s'; return RANKS[12-j]+RANKS[12-i]+'o'; }
+
+/* ============================================================================
+   6. ДВИЖОК АНАЛИЗА (rule-based) — реально считает, не mock
+   ============================================================================ */
+function straightOutsRanks(cards){
+  const vals=new Set(cards.map(c=>rv(c.r))); if(vals.has(14))vals.add(1);
+  const ranks=new Set();
+  for(let low=1;low<=10;low++){ const need=[low,low+1,low+2,low+3,low+4];
+    const have=need.filter(v=>vals.has(v)).length;
+    if(have===4){ const miss=need.find(v=>!vals.has(v)); ranks.add(miss===1?14:miss); } }
+  return ranks.size;
+}
+function bestMade(cards){
+  const byRank={},bySuit={}; cards.forEach(c=>{byRank[c.r]=(byRank[c.r]||0)+1;(bySuit[c.s]=bySuit[c.s]||[]).push(rv(c.r));});
+  const counts=Object.values(byRank).sort((a,b)=>b-a);
+  let flushSuit=null; for(const s in bySuit) if(bySuit[s].length>=5) flushSuit=s;
+  const uniq=[...new Set(cards.map(c=>rv(c.r)))]; if(uniq.includes(14))uniq.push(1); uniq.sort((a,b)=>a-b);
+  let straightHi=0,run=1; for(let i=1;i<uniq.length;i++){ if(uniq[i]===uniq[i-1]+1){run++; if(run>=5)straightHi=uniq[i];} else run=1; }
+  let sf=false; if(flushSuit){ const fv=[...new Set(bySuit[flushSuit])]; if(fv.includes(14))fv.push(1); fv.sort((a,b)=>a-b); let r=1; for(let i=1;i<fv.length;i++){if(fv[i]===fv[i-1]+1){r++;if(r>=5)sf=true;}else r=1;} }
+  if(sf) return {cat:'straight_flush',name:'стрит-флеш',score:98};
+  if(counts[0]===4) return {cat:'quads',name:'каре',score:96};
+  if(counts[0]>=3&&counts[1]>=2) return {cat:'full_house',name:'фулл-хаус',score:92};
+  if(flushSuit) return {cat:'flush',name:'флеш',score:88};
+  if(straightHi) return {cat:'straight',name:'стрит',score:84};
+  if(counts[0]===3) return {cat:'set',name:'сет/трипс',score:78};
+  if(counts[0]===2&&counts[1]===2) return {cat:'two_pair',name:'две пары',score:68};
+  if(counts[0]===2) return {cat:'pair',name:'пара',score:50};
+  return {cat:'high',name:'старшая карта',score:18};
+}
+function evaluateHand(hero, board){
+  const all=hero.concat(board); const made=bestMade(all);
+  let madeName=made.name, strength=made.score, cat=made.cat;
+  const boardVals=board.map(c=>rv(c.r)); const topBoard=boardVals.length?Math.max(...boardVals):0;
+  if(cat==='pair'){
+    const cnt={}; all.forEach(c=>cnt[c.r]=(cnt[c.r]||0)+1);
+    const pr=Object.keys(cnt).find(r=>cnt[r]===2); const pv=rv(pr);
+    const pocket=hero[0].r===hero[1].r;
+    if(pocket&&pv>topBoard){madeName='оверпара';cat='overpair';strength=62;}
+    else if(pv===topBoard){madeName='топ-пара';cat='top_pair';strength=58;}
+    else {madeName='средняя/слабая пара';cat='weak_pair';strength=42;}
+  }
+  let drawType=null,drawName='',outs=0;
+  if(board.length>=3&&board.length<=4&&strength<84){
+    const sc={}; all.forEach(c=>sc[c.s]=(sc[c.s]||0)+1);
+    const fd=Object.values(sc).some(n=>n===4);
+    const sr=straightOutsRanks(all);
+    if(fd&&sr>=2){drawType='combo';drawName='комбо-дро (флеш + стрит)';outs=15;}
+    else if(fd){drawType='flush';drawName='флеш-дро';outs=9;}
+    else if(sr>=2){drawType='oesd';drawName='двустороннее стрит-дро';outs=8;}
+    else if(sr>=1){drawType='gut';drawName='гатшот';outs=4;}
+    if(drawType&&strength<46) strength=42;
+  }
+  let desc = (drawType&&(cat==='high'||cat==='weak_pair'))
+    ? 'У тебя '+drawName+': '+outs+' аутов.'
+    : 'У тебя '+madeName+(drawType?(' + '+drawName):'')+'.';
+  return {cat,madeName,drawType,drawName,outs,strength,desc};
+}
+function analyzeBoard(board){
+  const reasons=[]; let danger=0;
+  const sc={}; board.forEach(c=>sc[c.s]=(sc[c.s]||0)+1); const maxSuit=Math.max(...Object.values(sc),0);
+  const rc={}; board.forEach(c=>rc[c.r]=(rc[c.r]||0)+1); const paired=Object.values(rc).some(n=>n>=2);
+  const vals=board.map(c=>rv(c.r)).sort((a,b)=>a-b); const top=vals.length?vals[vals.length-1]:0;
+  const span=vals.length?(vals[vals.length-1]-vals[0]):0;
+  const connected=board.length>=3&&span<=4&&new Set(vals).size===vals.length;
+  if(maxSuit>=3){danger+=45;reasons.push('три карты одной масти — флеши уже возможны');}
+  else if(maxSuit===2){danger+=22;reasons.push('две карты одной масти — есть флеш-дро');}
+  if(connected){danger+=24;reasons.push('связанные карты — много стрит-дро');}
+  if(paired){danger+=14;reasons.push('доска спарена — возможны трипсы и фулл-хаусы');}
+  if(vals.length>=3 && (vals[2]-vals[0]<=4) && !connected){danger+=12;reasons.push('карты близко — стриты в игре');}
+  if(top>=12)reasons.push('высокая доска — попадает в старшие руки');
+  let label;
+  if(maxSuit>=3)label='монотонная'; else if(paired)label='спаренная';
+  else if(danger>=40)label='мокрая'; else if(danger>=22)label='two-tone, умеренно мокрая'; else label='сухая';
+  if(maxSuit===2&&connected)label='мокрая';
+  if(!reasons.length)reasons.push('разрозненная радуга — почти нет дро');
+  return {texture:label,danger:Math.min(95,danger),reasons,paired,monotone:maxSuit>=3,twoTone:maxSuit===2,connected,top};
+}
+function calculatePotOdds(pot,bet,call){ const final=pot+bet+call; return {final,required:call>0?Math.round(call/final*100):0}; }
+function estimateEquity(h,twoStreets){
+  if(h.drawType==='flush')return twoStreets?35:18;
+  if(h.drawType==='oesd')return twoStreets?31:16;
+  if(h.drawType==='gut')return twoStreets?16:8;
+  if(h.drawType==='combo')return twoStreets?54:30;
+  const m={straight_flush:98,quads:97,full_house:95,flush:88,straight:85,set:84,two_pair:78,overpair:62,top_pair:58,weak_pair:42,high:22};
+  return m[h.cat]??25;
+}
+function analyzeRangeAdvantage(aggr,caller,board){
+  const b=analyzeBoard(board);
+  if(b.top>=12&&!b.connected)return{who:aggr,why:'Высокая сухая доска чаще попадает в диапазон префлоп-агрессора — у него больше старших карт.'};
+  if(b.top<=9&&b.connected)return{who:caller,why:'Низкая связанная доска лучше ложится на широкий диапазон коллера: мелкие пары и коннекторы.'};
+  if(b.top>=12)return{who:aggr,why:'Старшие карты на доске — преимущество чаще у агрессора.'};
+  return{who:'примерно равно',why:'Доска не даёт явного перекоса — диапазоны близки.'};
+}
+function analyzeDecision(ctx){
+  const {hero,board,pot,villBet,action,street}=ctx;
+  const h=evaluateHand(hero,board); const b=analyzeBoard(board);
+  const call=villBet; const po=calculatePotOdds(pot,villBet,call);
+  const twoStreets = street==='Флоп';
+  const eq=estimateEquity(h,twoStreets);
+  let verdict,best,mistake='',mistakeType='',evLoss=0,drill='boardlab',litKey='potodds';
+  const wet=b.monotone||b.connected||b.danger>=40;
+  const strongMade=['set','two_pair','straight','flush','full_house','quads','straight_flush'].includes(h.cat);
+
+  if((action==='Call')&&h.drawType){
+    litKey='potodds';
+    if(eq>=po.required){ verdict='Колл нормальный. Эквити '+eq+'% покрывает нужные '+po.required+'%.'+(twoStreets?' Впереди две улицы — цена ещё мягче.':''); best='Колл оправдан. Если на терне ставка вырастет, а дро не зайдёт — будь готов сбросить.'; }
+    else { verdict='Колл пограничный/слабый. Нужно '+po.required+'%, а у дро только ~'+eq+'%.'; best=twoStreets?'Колл ближе к норме лишь если впереди две улицы и есть подразумеваемые шансы.':'На одну улицу — фолд лучше: цена выше эквити.'; mistake='Ты нажал call, но эквити дро ниже шансов банка.'; mistakeType='call_no_odds'; evLoss=-Math.round(((po.required-eq)/100)*1.4*100)/100; litKey='potodds'; }
+  } else if((action==='All-in'||(action==='Raise'))&&h.cat==='overpair'&&wet){
+    verdict='Переоценка одной пары. Оверпара сильна, но '+b.texture+' доска снижает её комфорт.'; best='Контроль банка: чек/колл или небольшая ставка. Олл-ин превращает руку в блеф против лучших.'; mistake='Олл-ин с оверпарой на опасной доске.'; mistakeType='overplay_pair'; evLoss=-1.2; litKey='harr'; drill='boardlab';
+  } else if(action==='Fold'&&strongMade&&!wet){
+    verdict='Слишком пассивно. На сухой доске такая рука хочет ставить на вэлью.'; best='Ставь/рейзи на вэлью — пассивный фолд теряет деньги.'; mistake='Фолд сильной руки на сухой доске.'; mistakeType='too_passive'; evLoss=-1.0; litKey='cbet'; drill='boardlab';
+  } else if(action==='Bet'&&h.cat==='top_pair'&&!wet){
+    verdict='Вэлью-бет допустим. Топ-пара на сухой доске хочет ставить тонкое вэлью.'; best='Ставь ~50–66% банка ради вэлью и защиты.'; litKey='cbet'; drill='ranges';
+  } else if(action==='Bet'&&wet&&!h.drawType&&h.strength<46){
+    verdict='Опасный c-bet без поддержки. На '+b.texture+' доске у тебя нет ни готовой руки, ни дро.'; best='Чаще чек: без эквити ставка только раздувает банк.'; mistake='C-bet на мокрой доске без эквити и дро.'; mistakeType='bad_cbet'; evLoss=-0.8; litKey='cbet'; drill='boardlab';
+  } else if(action==='Bet'&&(h.drawType==='flush'||h.drawType==='oesd'||h.drawType==='combo')){
+    verdict='Полублеф уместен. У тебя '+h.drawName+': можно выиграть сразу или собрать руку.'; best='Полублеф нормально — складываются фолд-эквити и аутсы.'; litKey='gto'; drill='boardlab';
+  } else if(action==='Check'&&strongMade&&!wet){
+    verdict='Можно чекнуть, но обычно лучше ставить на вэлью на сухой доске.'; best='Тонкое вэлью предпочтительнее пассивного чека.'; litKey='cbet'; drill='ranges';
+  } else if(action==='Fold'&&h.drawType&&eq>=po.required){
+    verdict='Возможно, слишком тайтовый фолд: эквити '+eq+'% покрывает цену '+po.required+'%.'; best='С такой ценой колл с дро чаще оправдан.'; mistake='Фолд дро с достаточным эквити.'; mistakeType='overfold'; evLoss=-0.5; litKey='potodds';
+  } else if(action==='Call'&&h.cat==='high'&&!h.drawType&&villBet>0){
+    verdict='Колл без готовой руки и дро. У тебя только '+h.madeName+' — здесь нечем платить.'; best='Без эквити это фолд: голый колл против ставки минусовый.'; mistake='Колл со старшей картой без дро против ставки.'; mistakeType='call_no_odds'; evLoss=-0.7; litKey='potodds';
+  } else if(action==='Fold'&&h.cat==='overpair'&&!wet){
+    verdict='Слишком тайтовый фолд: оверпара на '+b.texture+' доске — сильная рука.'; best='Здесь рука хочет ставить на вэлью, а не сбрасываться.'; mistake='Фолд оверпары на сухой доске.'; mistakeType='too_passive'; evLoss=-1.1; litKey='cbet';
+  } else if((action==='Bet'||action==='Raise')&&strongMade){
+    verdict='Вэлью с '+h.madeName+'. На '+b.texture+' доске ставка/рейз собирает деньги с худших рук.'; best='Ставь на вэлью, подбирая сайзинг под текстуру доски.'; litKey='gto'; drill='ranges';
+  } else if(action==='Check'&&h.drawType){
+    verdict='Чек с '+h.drawName+' — пассивно, но допустимо для контроля банка.'; best='Часто лучше полублеф: фолд-эквити плюс аутсы дают больше EV.'; litKey='gto'; drill='boardlab';
+  } else {
+    const actRu={Fold:'Фолд',Check:'Чек',Call:'Колл',Bet:'Ставка',Raise:'Рейз','All-in':'Олл-ин'}[action]||action;
+    verdict=actRu+' с '+h.madeName+(board.length?(' на '+b.texture+' доске'):' до флопа')+' — линия в целом разумная.';
+    best=(board.length&&b.danger>=40)?'Доска опасная — контролируй банк и не раздувай его без сильной руки.':(board.length?'Доска спокойная — можно действовать увереннее, опираясь на диапазон оппонента.':'До флопа главное — позиция и сила диапазона; играй по позиции.'); litKey=(board.length&&b.danger>=40)?'harr':'gto';
+  }
+  if(typeof evLoss==='number') evLoss=Math.round(evLoss*100)/100;
+  return {h,b,po,eq,verdict,best,mistake,mistakeType,evLoss,drill,litKey,twoStreets};
+}
+
+/* ============================================================================
+   7. БЛОГ (оригинальные статьи на основе покерной литературы)
+   ============================================================================ */
+const BLOG=[
+ {emoji:"🃏",tag:"Разбор",min:"4 мин",src:"Дэн Харрингтон — «Harrington on Hold’em»",
+  title:"Раздача, которая стоила стека: одна пара на мокрой доске",
+  ex:"AA — лучшая стартовая рука. И именно с ней теряют больше всего фишек. Разбираем почему.",
+  body:[
+   "§ Ситуация",
+   "Ты на баттоне с двумя тузами. Открываешь рейз, большой блайнд коллирует. Банк — 6 больших блайндов, флоп: K♠ 9♠ 8♠. Ты ставишь продолженную ставку, оппонент делает чек-рейз. Ты не задумываясь отправляешь весь стек. Он коллирует и показывает флеш. Знакомо?",
+   "Эта раздача повторяется в покере тысячи раз в день. И почти всегда корень проблемы один: игрок оценивает силу руки в вакууме, а не в контексте доски.",
+   "§ Почему AA здесь — всего лишь одна пара",
+   "Оверпара кажется монстром, потому что до флопа она била всё. Но монотонная доска K♠9♠8♠ резко меняет картину. У оппонента, который защитил большой блайнд, в диапазоне полно пик: любые две пики дают готовый флеш, а связка 9-8 добавляет стрит-дро и две пары. Против чек-рейза на такой доске твоя оверпара выигрывает у блефов, но проигрывает почти всему, ради чего противник готов вкладывать стек.",
+   "Харрингтон постоянно возвращается к одной мысли: сила руки относительна. Пара тузов на K♠9♠8♠ и пара тузов на K♣7♦2♠ — это две совершенно разные ситуации, хотя карты у тебя в руке одинаковые.",
+   "» Не вопрос «насколько сильна моя рука?», а вопрос «насколько сильна моя рука именно на этой доске против этого диапазона?».",
+   "§ Что делать вместо олл-ина",
+   "Ключевое слово — контроль банка. На опасной доске с уязвимой рукой ты не обязан превращать каждую раздачу в гонку за весь стек. Чаще правильны спокойный колл или небольшая ставка, которая оставляет банк управляемым и не заставляет тебя принимать дорогое решение на каждой улице.",
+   "Полезный приём: до того как нажать кнопку, спроси себя, какие конкретно руки заплатят твою ставку. Если платят в основном те, что тебя бьют (флеши, сеты, две пары), а пасуют те, что ты и так обыгрываешь, — большая ставка теряет деньги. Это и есть разница между вэлью-бетом и подарком.",
+   "★ Вывод: одна пара — это одна пара. На сухой доске её можно защищать агрессивно, на мокрой — береги стек. Олл-ин с оверпарой на монотонной доске почти всегда переоценка руки.",
+   "В тренажёре этот навык качают режимы «Чтение доски» и «Раздача дня»: там ты учишься видеть опасность доски до того, как примешь дорогое решение."
+  ]},
+ {emoji:"🧮",tag:"Математика",min:"4 мин",src:"Дэвид Склански — «Теория покера»",
+  title:"Шансы банка за три секунды",
+  ex:"Хорошие игроки не считают в уме сложные дроби. Они используют два простых приёма — и решают за пару секунд.",
+  body:[
+   "§ Что такое шансы банка",
+   "Шансы банка отвечают ровно на один вопрос: сколько процентов эквити тебе нужно, чтобы колл был прибыльным в долгосроке. Формула простая — цена колла делится на итоговый банк (банк + ставка соперника + твой колл).",
+   "Пример: в банке 100, оппонент ставит 50. Ты рискуешь 50, чтобы выиграть 200 (100 + 50 + твои 50). 50 / 200 = 25%. Значит, если твоя рука выигрывает чаще 25% времени — колл плюсовый.",
+   "§ Правило 2 и 4: считаем эквити дро",
+   "Чтобы превратить ауты в проценты, не нужна таблица. Посчитай ауты — карты, которые усиливают тебя до выигрышной руки, — и умножь.",
+   "На флопе, когда впереди две карты, умножай ауты на 4. На терне, когда осталась одна карта, умножай на 2. Флеш-дро = 9 аутов: на флопе это примерно 36% к риверу, на терне — около 18%. Двустороннее стрит-дро = 8 аутов: примерно 32% и 16%.",
+   "» Сравни два числа: нужное эквити из шансов банка и своё эквити из правила 2 и 4. Если своё больше — колл.",
+   "§ Подразумеваемые шансы: деньги из будущего",
+   "Иногда прямой цены не хватает, но колл всё равно хорош — потому что, когда дро зайдёт, ты заберёшь ещё фишек на следующих улицах. Это и есть подразумеваемые шансы. Они особенно важны со «скрытыми» руками вроде стрит-дро, которые трудно прочитать.",
+   "Но честность важна: подразумеваемые шансы работают, только если оппонент действительно заплатит, когда ты соберёшься. Против тайтового игрока, который складывается на каждый страшный ривер, скидывай эти бонусные деньги со счетов.",
+   "★ Шпаргалка: цена колла = колл ÷ итоговый банк. Эквити дро = ауты × 4 (флоп) или × 2 (терн). Эквити ≥ цены → колл.",
+   "Эти расчёты — основа режимов «Pot Odds» и «Ривер» в тренажёре. Чем чаще считаешь, тем быстрее это входит в привычку и перестаёт требовать усилий."
+  ]},
+ {emoji:"🗺️",tag:"Стратегия",min:"5 мин",src:"Майкл Асеведо — «Modern Poker Theory»",
+  title:"Перестань читать мысли — читай диапазоны",
+  ex:"Новички пытаются угадать две карты соперника. Сильные игроки думают обо всём наборе его возможных рук сразу.",
+  body:[
+   "§ Главный сдвиг мышления",
+   "Самая частая ошибка любителя звучит так: «У него туз». Может, и туз. А может, и нет. Точных карт ты не узнаешь никогда. Поэтому профессионалы не гадают одну руку, а работают с диапазоном — всем набором рук, с которыми соперник мог так сыграть.",
+   "Это меняет всё. Вместо вопроса «что у него?» ты спрашиваешь «как мой план работает против всех его рук вместе взятых?». Такой взгляд устойчив к эмоциям и к одной конкретной раздаче.",
+   "§ Откуда берётся диапазон",
+   "Диапазон формируется действиями. Игрок, который рейзит из-под прицела (ранняя позиция), показывает узкий, сильный набор. Тот, кто просто коллировал на баттоне, имеет более широкий и средний по силе диапазон. Каждое действие на каждой улице сужает диапазон — как воронка.",
+   "Твоя задача — отслеживать эту воронку. Открыл широкий диапазон с баттона? Хорошо. Но на флопе A-K-2 далеко не все эти руки рады продолжать. Думай о том, какая часть диапазона усилилась, а какая хочет сдаться.",
+   "» Позиция — это не место за столом. Это объём информации: чем позже ходишь, тем больше знаешь и тем шире можешь играть.",
+   "§ Преимущество диапазона",
+   "Идея, без которой не понять современный покер: на одних досках диапазон одного игрока в среднем сильнее. На высокой сухой доске A-K-4 преимущество чаще у префлоп-агрессора — у него больше старших карт. На низкой связанной 7-6-5 перевес смещается к тому, кто защищал блайнд мелкими картами и коннекторами.",
+   "Тот, у кого преимущество диапазона, может ставить чаще и агрессивнее. Тот, у кого его нет, должен играть аккуратнее и больше проверять. Это не магия — это просто арифметика попаданий.",
+   "★ Практика: перед действием задай три вопроса — какой у него диапазон, как доска ложится на его и на мой диапазон, и какая часть моих рук реально хочет вкладывать деньги.",
+   "Режимы «Диапазоны» и «Range Advantage» в приложении прокачивают именно это: ты перестаёшь видеть две карты и начинаешь видеть всю картину."
+  ]},
+ {emoji:"🛡️",tag:"Теория",min:"4 мин",src:"Мэтью Янда — «Applications of No-Limit Hold’em»",
+  title:"MDF: почему нельзя сбрасывать всё подряд",
+  ex:"Если ты слишком послушно фолдишь на каждую ставку, любой соперник может блефовать тебя любыми картами — и быть в плюсе.",
+  body:[
+   "§ Проблема послушного фолда",
+   "Представь, что ты сбрасываешь всё, кроме самых сильных рук, каждый раз, когда в тебя ставят. Звучит дисциплинированно? На деле это открытая дверь: соперник видит, что блеф проходит почти всегда, и начинает ставить любые две карты. Ты сам сделал его блеф автоприбыльным.",
+   "Чтобы этого не происходило, существует понятие минимальной частоты защиты — MDF (Minimum Defense Frequency).",
+   "§ Как считается MDF",
+   "MDF — это минимальная доля твоего диапазона, которую нужно продолжать (коллом или рейзом), чтобы блеф соперника не приносил ему автоматическую прибыль. Формула: банк ÷ (банк + ставка).",
+   "Против ставки в половину банка MDF ≈ 67%. Против ставки в размер банка ≈ 50%. Против овербета — ещё меньше. Логика простая: чем больше ставит соперник, тем больше он рискует своим блефом, и тем больше рук ты имеешь право сбросить.",
+   "» MDF не говорит «коллируй». Он говорит «не перефолживай». Это потолок твоего фолда, а не приказ платить.",
+   "§ Где это важно, а где нет",
+   "MDF — это инструмент против думающих, балансирующих соперников, которые действительно блефуют с правильной частотой. Против них держать частоту защиты критично.",
+   "Но против типичного любителя, который почти не блефует и ставит крупно только с сильными руками, MDF можно смело игнорировать и фолдить больше. Эксплуатируй реального человека, а не теоретическую модель. Это, кстати, ключевая мысль Янды: теория задаёт базу, а прибыль — в отклонениях против конкретных ошибок соперника.",
+   "★ Запомни: MDF = банк ÷ (банк + ставка). Чем крупнее ставка — тем больше можно фолдить. Защищайся лучшими руками и удачными блокерами, а не случайным мусором.",
+   "В тренажёре MDF появляется в режиме «Ривер»: после каждого решения ты видишь и цену колла, и ориентир защиты."
+  ]},
+ {emoji:"🧊",tag:"Психология",min:"4 мин",src:"Томми Анджело — «Elements of Poker»",
+  title:"Тильт: невидимый лик, который сливает банкролл",
+  ex:"Можно идеально знать математику и всё равно проигрывать — если эмоции принимают решения за тебя.",
+  body:[
+   "§ Что такое тильт на самом деле",
+   "Тильт — это не только злость после бэдбита. Анджело определяет его шире: любое отклонение от твоей лучшей игры под действием эмоций. Скука, азарт, желание отыграться, усталость, эйфория после большого выигрыша — всё это тильт.",
+   "Самое коварное в том, что в моменте тильт не ощущается как ошибка. Кажется, что играешь нормально, просто «карта не идёт» или «надо забрать своё». А по факту ты уже коллируешь то, что в спокойном состоянии давно бы сбросил.",
+   "§ Реципрокальность: где прячется прибыль",
+   "Одна из сильнейших идей книги — reciprocality. Смысл: в одинаковых ситуациях вы с соперником поступаете по-разному, и разница в этих решениях и есть источник прибыли. Ты зарабатываешь не только когда играешь хорошо, но и когда не делаешь плохих ходов, которые делают другие.",
+   "Из этого следует неожиданный вывод: убрать один лик часто ценнее, чем выучить новый сложный приём. Меньше ошибок в тильте — больше денег, без всякой дополнительной теории.",
+   "» Лучшее, что можно сделать в тильте, — встать из-за стола. Это не слабость, это и есть игра.",
+   "§ Практические опоры",
+   "Несколько рабочих привычек. Первая — заранее реши, при каких условиях ты заканчиваешь сессию (усталость, число проигранных стеков, потеря концентрации), и следуй этому правилу механически, не обсуждая с собой в моменте.",
+   "Вторая — отделяй качество решения от результата. Хороший фолд, после которого тебе показали блеф, всё равно хороший. Привычка горевать о результате — топливо для тильта.",
+   "Третья — дыши и замедляйся. Несколько секунд паузы перед крупным решением возвращают тебя из эмоции в расчёт. Покер вознаграждает терпеливых.",
+   "★ Вывод: математику можно выучить за месяц, контроль тильта — работа на годы. Но именно он отличает того, кто знает покер, от того, кто на нём выигрывает.",
+   "Это не геймплейный режим, но фундамент всего остального: спокойный игрок применяет всё, чему научился. На эмоциях не работает ни одна стратегия."
+  ]},
+ {emoji:"🎯",tag:"Стратегия",min:"4 мин",src:"Эд Миллер — «The Course»",
+  title:"C-bet: когда жать, а когда тормозить",
+  ex:"Продолженная ставка — самый частый ход в покере. И один из самых часто исполняемых на автопилоте.",
+  body:[
+   "§ Автопилот, который теряет деньги",
+   "Многие игроки делают c-bet всегда: поднял до флопа — значит, ставлю на флопе. На пассивных столах это даже работает. Но против думающих соперников бездумный c-bet превращается в утечку: ты раздуваешь банк там, где у тебя нет ни руки, ни плана.",
+   "Миллер предлагает простую опору — смотри на текстуру доски и на то, чей это диапазон.",
+   "§ Сухие высокие доски любят маленькую ставку",
+   "На доске вроде K-7-2 радугой почти никто из защищавших блайнд не попал сильно. Зато у тебя как у агрессора много старших карт и оверпар. Это твоя доска. Маленький c-bet на треть банка давит дёшево и часто: ты ставишь мало, а заставляешь соперника сбрасывать кучу его диапазона.",
+   "» На своей доске ставь дёшево и широко. На чужой — притормози и проверяй.",
+   "§ Мокрые связанные доски требуют осторожности",
+   "Доска 9-8-7 с двумя одной масти — совсем другая история. Она отлично ложится на широкий диапазон защищающегося: коннекторы, дро, две пары. Здесь автоматический c-bet встречает много продолжений и чек-рейзов. Чаще правильно проверить, особенно без готовой руки или сильного дро.",
+   "Важная мысль: размер ставки — это сообщение. Маленькая ставка на сухой доске и большая ставка на мокрой несут разный смысл и работают с разными частями твоего диапазона. Думай не только «ставить или нет», но и «сколько и зачем».",
+   "§ Полублеф как исключение",
+   "Есть случай, когда ставить на мокрой доске правильно даже без готовой руки — когда у тебя сильное дро. Тогда ставка работает дважды: соперник может сбросить сразу, а если коллирует, у тебя есть аутсы. Это полублеф — сочетание фолд-эквити и шанса собрать руку.",
+   "★ Чек-лист c-bet: чья это доска? есть ли у меня вэлью или дро? какой размер передаёт нужное сообщение? Если ответов нет — чек не ошибка.",
+   "Режим «C-bet» в Board Lab гоняет именно эти решения: сухая или мокрая, твоя доска или чужая, жать или тормозить."
+  ]},
+ {emoji:"📉",tag:"Математика",min:"3 мин",src:"Чен и Анкенман — «The Mathematics of Poker»",
+  title:"Дисперсия: ты играешь хорошо и всё равно в минусе",
+  ex:"Долгий минусовый отрезок не означает, что ты играешь плохо. Это значит, что ты играешь в покер.",
+  body:[
+   "§ Почему результат врёт",
+   "Покер — игра неполной информации с огромной долей случайности на короткой дистанции. Даже идеальные решения регулярно проигрывают конкретные раздачи и складываются в долгие минусовые серии. Это называется дисперсией — нормальным разбросом результатов вокруг твоего истинного матожидания.",
+   "Опасность в том, что человек ищет причину в каждом убытке. Проиграл — значит, сыграл плохо? Не обязательно. Иногда ты сделал лучшее возможное решение и просто оказался на невезучем отрезке распределения.",
+   "» Краткосрочный результат — это шум. Сигнал — это качество твоих решений.",
+   "§ Что с этим делать",
+   "Первое — оценивай себя по процессу, а не по результату одной сессии. Правильный вопрос не «выиграл ли я сегодня?», а «принимал ли я плюсовые по EV решения?». Деньги придут за решениями, если дать дистанции достаточно времени.",
+   "Второе — пойми, что дисперсия делает банкролл-менеджмент не перестраховкой, а математической необходимостью. Чтобы пережить нормальные минусовые полосы и не разориться на них, нужен запас. Это не про страх — это про то, чтобы остаться в игре достаточно долго и дать своему преимуществу сработать.",
+   "★ Вывод: суди о себе по EV-решениям, а не по результату вечера. Именно поэтому тренажёр считает EV-ошибки, а не выигранные фишки.",
+   "Каждый режим здесь устроен вокруг одной мысли: тренируй решение. Результат — следствие, а не цель."
+  ]},
+];
+
+/* ============================================================================
+   8. КАРТА ПОКЕР-КЛУБОВ  — демо-данные                              [GEO/MAPS]
+   // GEO/MAPS: координаты и список подтягиваются из Maps API + геолокации.
+   // Ниже — образцовые точки для прототипа (не реальные адреса).
+   ============================================================================ */
+const CLUBS=[
+ {name:'Casino Sochi · покер-рум',type:'Лайв-кэш · турниры · игорная зона',city:'Сочи · Красная Поляна',note:'Крупнейшая площадка РФ: серии EPT и WSOP Circuit.',lat:43.6772,lng:40.2589,addr:'Игорная зона «Красная Поляна», г. Сочи, Краснодарский край',contact:'casino-sochi.ru'},
+ {name:'Покер-сообщество Москвы',type:'Сообщество · обучение',city:'Москва',note:'Разборы раздач и совместные тренировки.',lat:55.7558,lng:37.6173,addr:'г. Москва (точка сообщества)',contact:'Сообщество в Telegram · демо-данные'},
+ {name:'Невский покер-клуб',type:'Школа · группы',city:'Санкт-Петербург',note:'Курсы по диапазонам и матчасти.',lat:59.9311,lng:30.3609,addr:'г. Санкт-Петербург (учебная группа)',contact:'Запись на курсы · демо-данные'},
+ {name:'Poker Community Kazan',type:'Сообщество',city:'Казань',note:'Домашние игры и теория.',lat:55.7963,lng:49.1088,addr:'г. Казань (сообщество)',contact:'Домашние игры · демо-данные'},
+ {name:'Покерная лига Урала',type:'Любительская лига',city:'Екатеринбург',note:'Турниры без денежных призов.',lat:56.8389,lng:60.6057,addr:'г. Екатеринбург (лига)',contact:'Любительские турниры · демо-данные'},
+ {name:'Сибирский покер-клуб',type:'Тренировочные сессии',city:'Новосибирск',note:'Совместные разборы и софт.',lat:55.0084,lng:82.9357,addr:'г. Новосибирск (тренировки)',contact:'Разборы и софт · демо-данные'},
+ {name:'Sobranie · покер-рум',type:'Лайв-кэш · игорная зона',city:'Калининград · Янтарная',note:'Покер в западной игорной зоне.',lat:54.9533,lng:20.1580,addr:'Игорная зона «Янтарная», Калининградская обл.',contact:'casino-sobranie.com'},
+ {name:'Tigre de Cristal · покер',type:'Лайв-кэш · турниры · игорная зона',city:'Владивосток · Приморье',note:'Покерный зал на Дальнем Востоке.',lat:43.4106,lng:132.1389,addr:'ИРЗ «Приморье», пос. Артём, Приморский край',contact:'tigre-de-cristal.com'},
+];
+
+/* ============================================================================
+   9. АНИМАЦИИ — числа, карты, фишки, replay
+   ============================================================================ */
+function animateNumber(el,from,to,duration=700,suffix=''){
+  if(!el)return; const t0=performance.now(), d=Math.abs(to-from)<1e-9?0:duration;
+  function step(now){ const p=d?Math.min(1,(now-t0)/d):1; const e=p<.5?2*p*p:1-Math.pow(-2*p+2,2)/2;
+    const val=from+(to-from)*e; el.textContent=(Math.round(val*100)/100===Math.round(val)?Math.round(val):(Math.round(val*100)/100))+suffix;
+    if(p<1)requestAnimationFrame(step); else el.textContent=(Math.round(to*100)/100)+suffix; }
+  requestAnimationFrame(step);
+}
+function dealCardsSequence(cards,area,opts={}){ // cards: [{r,s}], area: DOM el ; staggered deal
+  if(!area)return; area.innerHTML=''; const cls=opts.cls||'';
+  cards.forEach((c,i)=>{ setTimeout(()=>{ const d=document.createElement('div');
+    d.className='pcard deal '+suitColor(c.s)+' '+cls; d.dataset.idx=i;
+    d.innerHTML=`<span class="r">${disp(c.r)}</span><span class="c">${SUIT_CH[c.s]}</span><span class="s">${SUIT_CH[c.s]}</span>`;
+    area.appendChild(d); }, i*(opts.gap||160)); });
+}
+function animateChips(fromEl,toEl,amount,color='r'){ // fly chip discs from->to (Web Animations)
+  if(!fromEl||!toEl)return; const f=fromEl.getBoundingClientRect(), to=toEl.getBoundingClientRect();
+  const n=Math.max(1,Math.min(6,Math.round(amount/20)));
+  for(let i=0;i<n;i++){ const d=document.createElement('div'); d.className='chip fly '+color; d.style.left=(f.left+f.width/2-15)+'px'; d.style.top=(f.top+f.height/2-15)+'px';
+    document.body.appendChild(d);
+    const dx=(to.left+to.width/2)-(f.left+f.width/2), dy=(to.top+to.height/2)-(f.top+f.height/2);
+    d.animate([{transform:'translate(0,0) scale(.6)',opacity:.2},{transform:`translate(${dx*0.5}px,${dy*0.5-18}px) scale(1)`,opacity:1},{transform:`translate(${dx}px,${dy}px) scale(.7)`,opacity:0}],
+      {duration:420+i*60,easing:'cubic-bezier(.3,.7,.3,1)',fill:'forwards'});
+    setTimeout(()=>d.remove(),520+i*60); }
+}
+function resetTableAnimation(){ document.querySelectorAll('.chip.fly').forEach(c=>c.remove()); }
+
+/* ============================================================================
+   10. СОСТОЯНИЕ
+   ============================================================================ */
+const LEAK_DEFS=[
+ {id:'call_no_odds',name:'Колл без достаточного эквити'},
+ {id:'overplay_pair',name:'Переоценка топ-пары/оверпары'},
+ {id:'bad_cbet',name:'Плохой c-bet на мокрой доске'},
+ {id:'ignore_pos',name:'Игнорирование позиции'},
+ {id:'wide_open',name:'Слишком широкий open из ранней позиции'},
+ {id:'weak_bb',name:'Слабая защита BB'},
+ {id:'bad_bluff',name:'Блеф против того, кто не фолдит'},
+ {id:'river_err',name:'Ошибки на ривере'},
+ {id:'overfold',name:'Перефолд (фолд с эквити)'},
+];
+const defaultState={
+  onboarded:false, goals:[], xp:0, streak:0, accuracy:0, evLoss:0, sessions:0, topMistake:'—',
+  dailyDone:0, dailyTotal:5,
+  leaks:{call_no_odds:{c:3,ev:-2.1}, overplay_pair:{c:2,ev:-2.4}, bad_cbet:{c:2,ev:-1.6}, wide_open:{c:1,ev:-0.7}},
+};
+let state=load();
+function load(){ try{return Object.assign({},defaultState,JSON.parse(localStorage.getItem('pokercoach_ru'))||{});}catch(e){return Object.assign({},defaultState);} }
+function save(){ localStorage.setItem('pokercoach_ru',JSON.stringify(state)); }
+function updateLeaks(type,ev){ if(!type)return; if(!state.leaks[type])state.leaks[type]={c:0,ev:0}; state.leaks[type].c++; state.leaks[type].ev=Math.round((state.leaks[type].ev+(ev||0))*100)/100; save(); }
+function leakName(id){ const d=LEAK_DEFS.find(x=>x.id===id); return d?d.name:id; }
+
+/* ============================================================================
+   11. UI ХЕЛПЕРЫ
+   ============================================================================ */
+const MASCOT="data:image/webp;base64,UklGRng5AABXRUJQVlA4WAoAAAAQAAAAPwEAPwEAQUxQSG8WAAAB/yckSPD/eGtEpO4TDCNJbWMMJmie/gtWROMCIvo/Ac8ySlcYc5ro8oyxSv0pxh6RqiJzg3GEVBVpS8wAr86IVNNk2PH2CqlMn+dhoIBEzCZRQ2LAIAAuIUu4yBOBKCJL9y7KqMMV7q0FbsEV5LgHP0P/8/4Ofqjh+746XNXgV0RzfHUYuL/bexERrbl7VYwS7jUcGHiieUlgZhApYCBGbiYix3g6EDGTQ4ydzDQ7wMCWJJBmOwDAe9pn5gxD3hNRVYwJ0zwjYrqFFYbDtm0DybK8/9J3/39X/AARMQH5mvt4nXmatlWNAG48Au2muVda9Le22/K94PiFdsvvsPodbHmW1W+U5mnAT3Z5Ed0dfSfSfVjehRtYXwojiTZvC8rM+0jsEWtaj0TMifydXM4EciY51XgKB/UIhWPkGHuAa+wpgQMgifoamiRsL7Hmhu4V9yHQN2TNR+Q5pfkS5SE387UbPOC25ke38ovb2vwMoPpB3dbmSZwFiLdtzcPeEoG2+V6SJMl221Th/lc2aiGDHxDAm2VETIBvSZIsSZJsC0n8/3/Z+cEsqrvn4vM2EBET4FuSJEuSJNsiIvH//+IO5QfPfuqZjHyMiAnwLUmSJUmSbaF4//8nO9ODWTfcsqr9MSImwI4jSYIkSepZ9/8Pb5oqUX3UYrvZiJgA7jwkqVJXnetOInKYpG1ZrVIjCflz91gJBx0hCBgvXuQZVHELKc/+UGVFwscuBUm9mB1d10spz6qrIVFH/YUiHCl1pErKM5HkxU6SZ0lpUkmBQOj/mGjipHIqPnEobicU5lGXC9qNpKhZKkV45aL/R7I4rnWpLqdU6uWfy2GXf3EfKamUVr5UnbGu02Lk2StXdd2OeyHvsd7o4DyvcPKaXWlS6Wldzby2DiHdTq6Pc5VzpKllaLS3PNChO3TidN2Q1MTCVm4WAa2BICKmZkTe+TgfOAm6oQizI5lIUkPE2DarmZYMIwro5xMQ1UJKzeDjk0ME0U1CiJfTwyMirwUzle/UClYhUT+dQCimnGmqZNCFoRI7QwX0yrPE8aiiIA2WypiVRSX9biItjSwzMJDvbkqqxLpR8m/OoVLa56Wz8xoLhsMsIz96LASN9EOUYg4Y1D7flHZL3SCBHbaD4V4EJeVS6tZxcBal2CqznaaPKnRBmp2agcH4WuualjGqowj2DfaD5/dYUVpy6JzL7XM+cGBgln4RBB+USJjpaZagY4ztLathsYjkItl4tyk0rYdODnflPnfnOK5gyFpJlslTju52qJcViTrYNt57rCyV3S5d4vz7896UlpZz0fvnc+7u4CoMvQgI4RNyNrVvvefu4S66jFqvS0/IiNOHJNXWI58Cc8rGD6tUI/kbHIjakWUf7rggytpjprrJiJ8Nkqp058ykBY7tInYh3N+aQLW0Os7jx8zKmmVKXS4woipVHCef5QSuc+sNnfv7kqTSedUOODwrWWWVNJc/ZzeXdETWPpLI3alWMn9nEz37aGkCV2jGi1UeOe4P8l7OF3lwGVbK8rhI5x5HpvKhiw9nKEzSZCKV8qfOThJiHll21zWZdau8+jDkdHV6xymNDVemKEV1fyxiKqRxnHYv/tikSJ5kcFWf7tIEx9ubTMyi6vzpg6liHJ53Xd4atVUepqLmdXefOzgy0lSrIG4zouq6/qi2Zv6Y1o8gkNq3/7vjOCs1lb6Je60X1YmlVvXmUtbqF3AheXnVHU+YzVo/8x+cpJKsLquV9uYouj8XaeUniiM0hxPP4v6LqMlFKWSjNGVk3pu6xPJjlhCZqfbNf3pphJPauLKJeYo3BipndZ4KZH5nIf/9KXocddBpXufujeK6UwNmqn1B/BLTTl7uDrJjgqV3JVxcV3oO3mutFKn7JQTHsT7Pc/TkYjIw78gFeXXm8QiqLUdF8iQzMnS+78u2995/jNPdjwuPK6/0opnTQnmYSWU70032vp5L4u2g5If6pIBla2LyC02YK+cmsP1sXeWvNtQ87yIdpk5Lonsef0aVTYO3n1O5BG9EOPpwdQL84Jb2zW81QZBWCCMKYd7JacenwrG9mcogfrHpi6w7iH2cCgTeRJuOz5Uq23t704S638zzrquuPOQ8i6TbuC4/dtbY3s+emtTx2z1+rLzSz+dOXdxn6PO557kHSNMXQZ5ytkzff/45i+8r+iuYnp/nc3eUOZcKPqSsCN12dybfcV1fUtfnuQNs663kSU+AdLv+dEi8PKJPfLhTbaa/LHFFze5KQ4+LT1PpnrssXxsSPioCqKzrYx5UkBdmD9VdZFNN4oEfBLuuys+VBNhV7eFxHTg2JhK/9IM6r67POcu1F6Zn1WurXfdbI9D78u5QXVlFQZnpxOTJh9z9gXv0J+ruCEVqBhjPrytR/ge/4o1Mp8gSVnvk2ZsXU8S9pOAmv8PCW38VdSmkohlMAXUBitIWU65CXGcntceNDfv6Nc4WbYRZVHQVrGoJQoP9HpB5T1ntKZdx1bd9VzMRv8tBGtVey7oEcZ3/+9w9RwkR0Eq8l/e2sqL7Pacnn3s+z0UFKCsax1F9Z1b0ezO58/PcgT8Ua3qUo5or418fW+fdPQetSsAFOVL3z9SM6JfOYfZ9nPJSIGt6rj6e+zrVCvwhMa8+3GEtiFjV5O6o/d8q+pVwcl3ckepiZVPnXNV0tsAfavqzVTOJ1uV555A6p1T8stdlQtq7YGmC1Ah7+3lLvP4VYuXlCdlWsrxV8j0ZP3tvWdcvYNbH0i2XrQWCxujt/fBKyQ8q6nkF/LSm/IFQkjd4W77Rv8BpdaWMpxP5AxeiEnjOFE+XoF8H7M2Z1x8It7ij2Gu5wpP1WvcR3X72hnV/olS80hGvrehkh9bdp7a992x4/I2bnJWqzVbRiYp6Vx6kbi8Wu8gXazOR80Z6GR9CtbCFKt3LjqUNOXPFWcXVVIuFSlqF62bTv6eJKj+6SrVipZOutDvKtWmnGXXcoaRpylqnFHcHqQp0knoUNfLNktWOKp6v2qboSYQ6G896LdY7z4/73Jd/ztvF88am2Wi9nh333F3pXzrFWPd84GKXKi5YMi5QvWL6XlTu7iG0AmXFQzpS3y4Vv8ZwfThQs/jFtwdI308wX6+Unpj6x19aw8MR84qk34nQdVc5VOTXHtBl7+ny9CtCcUBqgvzaAxflrjDKN/NM3aHZkt98Oh6IPpWL4BeeURU1kd8dcdeRlRLU5w5xd/ePykRw7VKen+uOyf371HlxkirK6q8biypR/7aDcj4fK5MBvKC6Ywuff1dPFn1UAV2+CGrbvkj9mxxVwvwz6x+5jbDK+Tff9erplH+GHVfsifs3oahCUPwnEJbsSfRvS7XiTOUf4aI8vt/ybw/KggrQIShMnrcNfaSybeucaEzh4g61sM1n46siQMfgedSjoT7Qt055lWmMVoS9FZDaFvfAOSiOo12zr+Eb7oe5phyzWHG1qIG8W7N0+8bP4e9amdEbAdK5qkMdhTqOvp/EgC+BmsdLfpMVGmwbb0Y9kq3cj+LIlYyNeuXEabLvFHQYOo5yF7A30hdCSnGr3DGPR5WHY6Pq6Eyo0nfJcRwOLtoFsO28mmaHbfsGxzxeRZ60ve29JuWcW8uv8mAmbtuOdKDtVPhSvwqqSmDfHItSxPZd5X4SR+06s+/+NTXUsQ35TRZ1q68p9SLLEhhbfpi1Lkwr7xKRDn6q3I/iCB/a99E9BElFHuvkV3mnO2e2LXtMPQgZr+V+F6qnWSLQCA8Zb8lPs+5hrfJcYSgb89MsXaU/CrfUHbcKnIvOUrdWI6F8OnSrmMxZ3X0Ps4pUuqN5NBjs5GNVeXAuRyzSwailU4ulONxB1U7M5vejghnV3K27tKSjkUqkNKm4kCmGc+mJxkguR5PxII9Gk5aLCxnjmar59JScqtNM46FyUUw5yk0UDkckhTLSBWXEeOa43SMVJVLGeLbbh0iR5Iqmmw+3XFylR4KkHI9I4oapwiXNgO5KLreSVGP5jQZdLhFHhW/XiKzL3SglDXZlRE/+bEWR6BoSOow7pF1hNyDZPTpGHERkRCNOPM575n4izeW9aq5VN/mRplxXnGe7Qr+Rm7TGJCHJzzSJl/Ka9CtJ8rokK7n6iYSdFnMEYe43soOwdhYNO7/RxaFBynNdP5I8z3NTy+qi3wjSWqxomQWOCZmQZUIYY5ogQJD3ZHdIJA6zP4xBzav9EYOaXvn//3bgpKSj8CAHRV7twNjGJB3lBEnGtOvskehyKeSQoDVaSj4TQaY02X1JQocmM5rnrMc8O2ALnJCL8bLmBgLKiHaDISbvG+CM4L7eU4ImMqTptkfyuERkTJO1xzrpEMEZ2cmsJN08FRnSzJ+lrgthIyekM9GUEh2IbQ1Ilx5L7BQpJg6IdNnyKAlBhkTFmrzFhaKM6CjIFUkCOQck19iOSFYHKf9EQy2r0DwnwP0LuY1uWWpnCtjCxiOkoZJRErjxL3QYe0gyJaLaeHQ11cqhCk9FmQ8p3TdRiW8QFfeGI1LVdOVZdw4l1NmgUhRpiW4CEeORWudbXWL0mIHjkaJ1lPOIY36DOBpKo7hkG+s2JYyNySzJ4JRQcL44ACdDakTPl5l+XEtAnIsoLfdQGTYMlESZzPI1V3riHIZ2AZNxU+3qnMsjysauAhyLuqZCnfJabFNVk3FNLbnXe4Secv7OhdIqjyvPw3zNciE5FTtr6pxz/mH5Gt1eOBaVaZzrdHub9t3iCsCZSGaj+/ScZ8f2HfJvHw1bhXNd/q4id59C4h9l0n4AaRM9Ui3d50MaOBER47GhbiqHvUx3H8yQkejMMaYpL9yj2nVRhDNRjLdI5aVSiQ+ptoHoWPJgrZSOdGqFNMJ56CyUsZJNefGYtaQZpNPALlYDsUBfQKtiqsU4xpnVwz9uxJtmV2qR4ixAxBxk6eYbqtUBeYTTULKEP3DyDvKHQXEATkKKVYzI5G3/3FTjQhwExWpEaqFvNMC6TUoBmcOCJaNxR8S7gt8D8ghwDHJLS8DTQ99CUHpD8grngEZNyCiNTwrghmlJTkG3hhWH5/cHUt1VV85NnIJyV9E//YA8X67bRBnClXsvEeWLdVeXCDgCWenlTiD8UIS6u01lCnu/riAinx10kVLQIaBEdZD2IVTWO0NYD10wyhePTObVTVo+Ul47EraPPQdBVLH+jbEMIepjR05b4p4DcHcfSlsRN76ZEg/lcPE66kUR0lek1no6BBcujpMqU6nfoafy3tIxr1Wr8u1KVFuFsIXLa9XyWt9BabXelHVve1Ra9S3wBGdqbTVo3SSprVeKr59TtV4qQpesbNbjWXX8mgQpx/MBOP7qF/f+8za0OG0rTfDu0ar7m3XU472Re3t4DnlODx4rOFyuO/rxZwDXDulJormCmyP+5H3pe5tle8hJx8ysY+tHl+vuh20TvR2qk0jGNJpqHC3WvrXtucuK5MS1nD3bvkiXKkD6vnPaWXHekFrrn/erQFyrcvoOT684dzI6uLoT+DsdkPl1I+888FTvzT3w9OKu+ztdulpwehYnT2OKJ3QBHPc34qDVKxSdF+CpWBm2oUV83xqp8mZxelXG2VtMP29QKMT9hQ4op9VdHyr5wVrjvQ04V0AtT0U5FZ8+dp74A7S1/bwxe2cduDodkXuHHc+ddyC/2Fg/bz8P/Oct41jccKh7Gz33efho/m8ISd3nY9zVr4esOd6QvPjlGHXdBy8vBVyWgE114HnuO/kz73GX0uWRLO1kajLPq4p+JmvINbQuNsFFSUmnRfYd8cvRwu2RmSaLOg9n5ml2xRWOPFjWpn9aESZrrIP66NWvZYL3Bl6bQCzpVLfxAlfnJfhjYqz33sBvwPVItjodwKezQn4/TYP7fK4o/xettmVdV+rmxkW20XFPzR4uxiSZ1aWJV2EKdx5GxFJWXpPKcuNKI4kzQYircJ08szD8vpJmnmlFAaJagDp3jyjYmVyLRtGU2AxkFUs1kk5lihcidaWwmb/W84uczGzzRxtyweWhl2B/fqG5MOUp4//k8FY45+Mj/XZVrxqFSr2m9xPEOXeUfjnTdOV5UFwarjXP81FLv1pR0+XW3iSuur2okvckPTZZrlEFFhe+HqVX7lBaPawKEqdjsVJS7LreX9YkJcTDDlXa1F23VoTJpee5tbWCdulRRUE1XQW3KlfcYLX2bd8tQ0RPqnKp71S4576pzh0epDMD6OF5RPQLxZW0uRwT6t8et1k1m87qgbvr4tLv0yWlttyA89qr7kKp5TKKA9QR+m2CIr+nwNKzdu6j7irV1IjuU91U+mnoW5tmoVWXQd2E46W5mcJFJc9+lSqqmToQPLsqbjYKc041JuVG0RMJSmmtKXJ3dVUC3kkIM980a7QLLfGBfCeu9VIedx+vSiFuNijT101n2mPefRZRqW/TlgHP8zwfrZB7rnybft09z915Jwn9DgFY6c/b294wLf9FyE2XzE0XwPN5Sjt86lfoQsnsZ+/nrZF2ffa9f9x4T7fXxgEfu7TKPvQE4kak2d57zFd2XYT7rQnVvZnAmXXmlvD+oiizaW8DMq8zQ7qvIFK3VoFYdu28ZN5X5xWiTNMYmF5lXnHvfaUuVULRY6Hiv95TQVKlKzWA7L8q3B2uItWVbuhJOAtCwPuJEBNbvWhdZNlZifIAD6qW84cn9v2GtAMCeC99qaNmLqvj9KzzQnRP4HW93/Xprrur0Lnzdn8ZAVGkNlL2Jqhn5xVAPMSMPOro7wlersf9FQRBidIyrQnS9UeueJRJlaRLOa+dHrg73J8tuKQwcWWDEvX0w0ePv89G7ZHSFWtRuTwT7o8VQi4TtVxn3EHlWVxoTwPRg9R5mCKS5Oh63J8l9BlJlQzNwuuOio9lOd0ToViNQ5utyfQqhXtwf4zerILElJV4ccdzXnlqIn+tL5aMr72tWkvfxDjy9Pd6RKubRipK8n08d5+zTBX5m02YVl/7bqv57p82KSF59Wd6y3pSkzGyuuju+NznubQo/n4jlRJWOc+9RhrVtbTk2X+1PNNlV02b8fbYNniHWpTVpHtAQqKmr6mdfT7HvlR69Sjv/VfohbqhUqXl2w/sTSbuKMtyLqcnRBoXJaaOLnfCqd5xUreiJX3LevhOyKlP0UWsYmrZN2wDhJKySirk73IcLsKyba4Qd2jus3OK4oj7cv6D4zM3RilpNc2IgY5TPmaa35G/1eElMtdUN2GGa1fulKIbzrMIPAinLoxumGS7Zcb3MKdSGpcFIfl7noLS2tIY303lpMq1dJDalBcfdTeCiqlMkzrzlMTSStIcf+3n4sB6+OaxMZbgKBdHSaJIOkCnrqRimIbRlXPuguI0tUDkb/6AilattTcebxm3EClxFAWTFxPlhVQhSA6fO2dR/gFSfoeVtX1XzZi50cfzzrlcwoOXH4OZYcaWJ66FSqFlpLKxjEkZrTWrKfaZCy7OoYjMo9RjL0bz3guRjCgPUTaU1YwyX19LvlI6kUOxGsyOZPJFExOCQgamtxOJTFbzPEumWrtlKsr7aKsSD7pVX4flz+NCBJYkgRG/1pNGS9VUskLB0CavpuwGQbXbxaEUoYoKvt/LM0qlXVNJRclzJtmBYm4hDqX0iqKiIL/diCQqZaQi1hfCeLHkWYRLnERCEPk1ByVJXbvkxbd5xktoCSESB2mi/H8NAFZQOCDiIgAAEJQAnQEqQAFAAT49HIxEoiGhEtjVMCADxLK3fjP8GXDPin2btQPNeL+2P35bI/gOGTrfzRPLf33/r/3v2o/67/l+0D9J/5L+ofvr9Av6ofsV6yHq48wf7Uftj7wP/D/ab3M/5T/RewB/cP+d6Wnsa/uB7Av6zf/X16fZd/sv/D/d/2yP//2enRr9pe0r/Kfa923frX3E83by4RLPj34H/S/3n90fjD/c97PzT1C/yD+V/5L8nvzX5D6cv1Efbz6t/pPzK/yfwpfb/9P0Z+y3+59wH9cP9T5Vngw+s+wR/NP7F/yP8H7Jf/J/mP9D+5/u//Pv9D/3v8r8BX8w/rP++/u3+Z/af54fZz+zv//93T9rSmA6LwC3U7PtHjPn8kLTRID9e2AhKEJHS2bxmDytR5rapn2qnhptxTVLOz79nnzMecNjKCKr8vvuau1pEgDovAGmPXCVsIUJQqyez2vD4frzZ96gd0I52Ar4YRnCyok6wguYah11s2a8yte357GIlvBzCCAdUEA+xLvc3uHwtYhJ39SWFFhEqJ2AAxT2bIiMANGeLbqL653ynoCa/5elzLURB1JxSmTJ2ZvGXpfIryVWrVUBwS0kWMkyT8mB/xSVEbpjeu8ZgxIu3MXYXY2QJptlimAGLB7ET9MdZh6SquutmocQb3x5/E/O/jServ/H7XSFDxsvXGMsntqvq3d47VGjU1zA/flQi6LwB2Je07sMTjlUXYtsT/zdsk2hI5dJweccht8JFtFzA47FIILw8vyaed9tTVXGG1Lodi9x96VDOm352vBTHGpoNEA+y1YDr8y+u1dvGYHnbVe0lXCdRNNo3B3+Y8tURG7XKt/dr9uquL+FvWdbzfDqyhXSiZEfyRY9kAtgJdwR5OVgTYK0SdXfThZDat3LhBESNEXgUCs0XKTpetbUuucn7LwfKeBjsuf33r7/eVw3pQFw8kLGhR+2lGhyT8l+mRJLFdbMYE9JaIWiq76L4ezLBrctkDQx5h56Jv/gYH+0mIVKEzWmwa6HL0xBKeqBQ4Wcbhc2sCl38a9p96+2bHqI/ljO7By1poQo8ZpFn/uJufWq0o5jVa8LwcDZwKLP+T6xkP4/CxcvX3tY7nhRYPK1IwZ6MBTXsUxMrUno9+1hrRYdhr8t6wkigqka9XKmIFZu5Txz0froY1hL5qeZyT2e2InIsR8cUtjYPKwakrG1ElBN6uOw4J3TCrWYlizlnXW5o24prDHPtbZiAR8/EMi3tz8WkToF/+I+++8/d/ByJAHReA4pZbyL7lim17vmp4lBGyCWNjo6GgHdjVBCj/L7JbFyLuw7sjTK1IkAb+vwOr8zejzJJzhwzCdQNFH0bnL629uJcmdbZfvhy06LwKezHm9cxHriu8XF4x173kKg3wt5OoJYCNL0m8QI2gPd8xD2XczNv3x/xquvLwtFKX75Ma4a7eMweVhAgmju90tECViE8n/GzxBVqj/nPSY1dHDQuNNABMF7e876qDo/ooH/xPv4CA3VE+cEvfL/QeVqRgdCxiDXDB5fy8lUSpbAh2S/1v+V01DTSwsFUiYtJRGXn9dFZSrXpUqBmczfsYAA/v+C2QU+pVxs1/m4DrgdozFwinqYYMkjOzAjTOzN81w8eGMlduiUNrBwlaY6vKmx9S61ngBamZCveEiOMLgVjR2mobAbnJ60O4SkODuFy0bR5D/Q9uzMXC/TshG+t5RhyNPzQqwAHd0dxmpGXDEIxBUKQ8FBlfKwTRoHszQ5I+k0zk8woB/5carEiIjNw1zTzokvJ7qWLz5n34pcPXyll4yNVCrQPc3/5FtBlKpgs+7PmNrPGq35KAQVxXccmVzApbaaGtqd6NJJPzMVYSjXadbie6JJZuLYCv6ZyZLE1hqTcN0TFioAeqZ6mdSYabTXl3LO/Go3BBI9lvMxbDyQC9+qv5LrNq9ZLMAlkr6ipswKthAvAJGAUuJ7r+gAeou6liKAmqye5uygpimGekrRVdhYT9zbRr9b9TgEMnORRoWZVDsQsQMJsyCFeAq85bnOtSDiBSS9T/6CacJNSQDtJnldEY/hBNZNHQtXCn+CHDRLCwLoXHPaUEpCCA6s5U1hdcJHT4+T0yhOz0g+TcRQe9biBFqUaCyjBFJcSRM1ruWTIJQVFKE4dmeuJT2c23OmEiaxwEYurNIyC7WuQZfr9AcViu5UDvqHkb6FkehITdhQsQHyJVrdGekybSOI/I8lIK2CPcCLqK8xZ3TJeO9R0bKp5hdNHofnj1pHUevE0MEknMcxS6LcO+le68uGUk4frlp/9NxX3/KIuuiE0F2mr9dp2fjPOETUCftj2kB6FlolT+2E2/0HggfBknvJQNtKuW8ygtaszdFWEDhTusHPYRvIunulqpW0Yf/I28EfGV2688RqnpmClKggfeMYRPSaNdVp1fqiNFJCqPm8AKasIXg39FJrfA7/49Ua8X+grv+z/DoRzDuGYhlMpwkfgyotHPF6XUM4t3yL3q/LFwpthn20mj0w4x42JQA/XCkO0qheti7gA0lv2GfxFJBmyH9yVCw7vUmYUJdZAOyeM7k/Lh96mDhnFm1dzXCx70M0L/1RnxzlJYHEYLg1wv5CUyJi6kfzPjdMlZGaeddTQaH+AFkAFWQ/5ruO6dh9+TDzwKsW8ombdARjBG2o7+E33eRG6VpEW26m4lsMlAYNmVtTw83Gb1+tWb81BJwBdxoAi0hnebJaiyYUZV6GrfMENiZy6OBvXD9R+khWBKwDGX5J/1iSuTXYQuNHIDU/QdvucERO9py75sjKqA4Pfsz7FgFy0wGRpimNWjyvikcLlppyuTCf7htHMCNnqP7fHeIqw36XtSNkf+uzQ1CQ+JRWydLs66qgk4U5b9n/+8OsWdrJ0qf1ZVKGYBA0uQX9GsfqJl2YpboK9DNw04r1FrXcHCiz2aghOerE14qkLa6KLcfRmr5UAvJdkitTw7VQZSNVDdXYqhbW0uLQH2H6grz2A847kGSfgcjyJixA6338w6lvKTc0HV/NL/xL4fqFjWuJwPj/yJcrWbf+Ayup2GJRGByF24qKJ9EMgiEtFwyeZTkGfvLGxUGit8/eD9IHq/8SfbStn/ZacaqonHU2/qrEDwnNp0g2XQyfavvIyTIqrhOTxpExuJEvaDUs8Qtae9uCRmICtrwQ0ae0SMN6DtKlGC+s8tZNWVVY6GG3gJcH+Y3mKPIZRZHhqSWX+JCX5sO2fYtTljrVbzP/luY8vE9u1+V87Kio4+XtcM5Hzf0eXKdukt3tWgtSGum8Du9ZXzTGnlmhpBqrVNXRczjxU50RLgTaGpSSKNGe2zJ4FFH+m1B/CaEoviT9lTajYR0nyJePRcTgG3efPNwD/ua68549rAvLAX+jG6KDtCvsPWXD4xY/iYhmnE68gXBXmEcJjI+tevYfOfokTVfzt3D8+pfjVM5Jieaw45dY2B/uU+K/G+ZSfgmq4pr+86EvjhlUqUGaKRZaVEzMecYkMHGq/zTMDH7m+AB4VDKNKyliFh5Aw67eAsCQHMpPLBaCS5oiB0ooIN7a3A6+2v+leI1UoYatMxTkZbx27z5JVBR+vn8WFvoK6AtHYMsZWtz3yU/+xYuEJZBv/Ny1RsskcEDYwlOiaoUOHA1MCklM1qP41j085zGTCdTaXgSc5uC5QIP7jqiVravJKcnfwiVDxr7Y2JN4IyElN6k/sV+qFX37X1V3XMxuKZDM52Lw+zmh88R8vH4KZRyX2yGzlUaE3jou5PMOWvKRcr9PcQGQsifImGoz/9TKcUP0w8adu0z9o1e5JpPzQ+zcDFbcZFWEgNlsayJ8YE6wFa292Lcnme1KaeKlw8vNga3CGPX73nUJdiPbIDpvtcL5jI5c/WT2ha9AIfuvPGdcWPpgrAI6n8hj9q3tEefBXHPAJtRS2NUHOqzLdrKAHJlUL++ddDHygfj9s9EoP6DL/xvvDYlJsPh2Fmz0CPd0vLACh74JO5Ml5kFZAVwFpRnSAk2YTDojuIv7iawsid53vQwc5e9l8zSJoYXlVMdup6moXubP+HxTpzvhNtaLaIFkz3dY1Grc3MIdtXh1oxf+rog2AHTqYALsDo1VbdAAgHGwkK+An0+s5TZdGiOZbB85qbwIw1mTWO4+eFLZLuZzobjAVWBnF3N/tZoPTkbzNIjQHpWSF3DVz4U1DJqVvMld7UsTF9O3VH165R+/ygV3De9lv8FGx1BA3r+2Z1SIlLMEp0ryh9NJ6+yOR4+mmDYkIcQIEzRGjBuXDqr5VdmJ4fj4QV851ALeue1w/IlYTspJW4UMl8nDpk0tB6cE1jBGVrMl+6RLS7183e9iiJicu57Mc/Jzo7v/vOj/zfadBZ2GDoxeN3b9Z9hU1WQh6EYfgnmYXgGuQLVGGAEZP1AqFi/mmHwlpQiTVG3LF8QdtIMcbgS2WQf2meFBh4MOdOFpmbLol1qQfIOLZI8fuWg9qsBZo9jOsgAlIyYgp0UzATkiuf0N7uHIsSc7YXqDoSNd0gOFUZlYRNi/sK0J3//Xmp4sx30aJJeGnDWid0zY0ZpytrqPWbOdROjK8QdEwYGfdCr9Su+ciX3d/peJDg20zVvJBC3t71zv1ttxvbf6skPe7r8NXrQGHEkdV4nMop2ZGcyJAJS69cYhY2Xkl27fK+eM/NyV0zVWdpTmFp0YuZSJWfv5PNWcixfxN9EmzKaM7S34vgFmh6D1NJaxm/0SF5Sx0zI2P5dk9HQTnfyWTAO4egM6uWdtSCSPfjP/pvfjkPVfom3DI8f8YoAmNBQ6LRcN+kZFGx37EoOPfnTomUkt0pMMbsHAzXrBuXfp4yIjMao3tArC+dpEkIGPUPgO/WoL4WPVMz0d4HoFiGy7/w8f3eGYgu1kg5HCltorsfIdmNfCIx2ux1z/831+1sZroHHpYvUSVfkIUxFo2xAQVpLgm6mxEyYUpnedawslwfFqaWpfPGWuZHYbAHknA5TY9IjovcNOw4lCxQit9ZO3NIgAuFyCPXT8UVSiPfktbT/3I2XMWVcjJ0bTDnPeBK+AKv3I7QLs9FwQbotlUah9I9vNGRO1x3wFBfYR+Z6t7Iw89Os/c2EFD0awvSObypDW5zVAVm4cx61tZ7oWQz7rOjxNquLtAyKrKaCRf9n5bbH2tsJ62N+b601o+9cjXL1KK7tD9tkV7M/ISWwCCOgDrBT+72U00TTQESBxi2xPHbVZz30ZQAELjDnZdD9SaNMT8H/V8umix8dFsxwRMF7doLzbmyx5aIjrzLQwq3Pz95M2n9/obTSZnf4soLbAMW6ck0lPF8TvpRbVf0W91pS8zxy51hnLjQB724VGo7LAUQL456m/br6bvgLZ9y334uDBf/G3ySkLli8hhF/oFJotvmud/nERKSVFKuaHIGiLofInCyVZhpehP9vK2oRuo/Ipnbv2AG+VO0cTOHN4yKxYoLZy+08t2P4PApha0HmEYZcrYbfj48ZV3AtYkussDlO2s1Pefrb8xv8mAZVKv56/iWCELCHUTJCDmJDnVhr8KXijzBI34VqnpFr7MfwhVMt/VBjwljTZDT7Ca0CUzcP2f4Jsh9Xln5L8eT1mRLvPTbhdOR0lwhkoyEGnrEcUg9zUtV2dLXv4vGp/qwIwgqV3fVASZuRpxlc8PtCZTTlO5GajXtccjY9jAvh8BJEilu6+lSkz/5S7XFU2LPLCVGe3GymqI8AMdJFtyOKamp0zNz0qOJLf95D+x3Z+7iz+ZS42kuQeHosHNwO0glYxElEjsRFwyQLAFYazUmhzG93y93xWagW0SBkGOxWHZRkIBlKrcGb/1/802sSyO1hV1Y1XkX6EGK8igWVc2jVSvwmdvGptRg3btFFYns80yQ2ikSbZoJa5KP7VCP+m4UiH1rALobsTKkc+M5MI3n/C7vfgU1J55i5YN1NMly4MH7UozVz8I/paFtbQHWYY+elvfjn5Mwj2RM+mVH+lfMj8m1gO1d4ermt9gsxO41ikWDEUaqwdbAWcYzK4n3LI+sL/lz7eJM+Zs0jlAVjFq8QvkOQAcoa7u1sD9gt3dCWp+PdyT8XzHyvTs3Xj+GPJnSvV/ir7diNWWHIdyQOhSZOJP+ojOEfoI5Yayd8y038AwIjNl4zhd+MZSQOwVpiyKFJWRcaMgejBb8cEunP7s2fI1bLi66V7LxthAALfQA4ZlMvVUfmdnn95IkWZELOsSxaYGIrrHFOm8Qg9y52EV2cqaXQmdQOS6UZGumnq4b6Z0FzXKK4/G/kTVw/FsF35wgC2d3OdBjt6qbBWfmHl3F2NiEWGf/n7qOQwBEW9UXGkhrFJ3JCLYX+yENKF86v128Cf+2pnYsxAOC+ExaYqpcT0O1HEANrBJdqJUs1yaS/QxK7XGxnuvcyktKQ81IufQzg4xTqfGpbVqFfPg4WlEjDlXkHu3k2SJP547DHtYNj6xCfRI6+hNWl49y+dor0v6phCDb7ggLboKMBAdP0uP1N/rplf0l7Nldpl0WuAG3XyFydq+BiI9GgMIyPiIV0RMFSIhVUb3vQ7gMc7Ra/4ov5g6AP2KY8UYEDItFoB0C25Z3svZAiMbQB3tFkUodt5Qw/LShMTmEbYNqUudU7iEEgir6TJQm1BF4LF/V0u4z2IYjcunPMCECNMqdD1/AVUm756Y5p1r7XUEeuEvyQ1or8YAhrmS46e9eF7nlC3ecmnNekx1zZ6NO1fTqbs2jRVKctQc7kR7YJ1wUDaSkWmF7C8I622+M0G3vmuZ3UdAPss5Gg+xZ2QQbTGbEKQhWj1FGW9Oj3sTjffMedy9Byb39RUqvqQEmsdQTvzC+pOhrcWHHppz6VvBIwJonzDGZtIq1bHC1hAsMbxM6yyJfljbNwAB9yyWOmjmQSSKnAxb/aMVharvWgwyXjWyTe3/v4A5vebCrdnZkvcgaDTK3XDxQK8tV4K5/JU5ClSMyL0fgSZ5NyiQiCHg2hoWlqIxO+lgIxar4g+UXHhJaG+E0mKitu9BMH9DHkSmKmF2ilOT5r+zTMIlfPTOszXosc3wv3di4jQcrl1QUTyI10/z4hRaUjwKnMjoY3FHM6HJB6nYkys9Xq3vXHI9pCaoyPsrz+7stY61eczJG5LA2f9da+Sc1x17ontITCBk3pAYtxuI01rnwnKVMkeGBAhi/qWoLRzObe3c5wHLRsIrmSgkj4QLE3NaWxP2VRcqFDJZbovBTm5rLyokN15MRab6xHzktNvLSnCmYvQfJPQJIwDv/gVrm+WWUFYSSVwSv6Ipv1dGjJDSPGwXToPmI5KPoAy6SW6axfCKQU/Vh0ZVczRHUMndluqEbVBefOvDcQcGzPnp0c5dPHSMx+F1DMpQZqejzi+7txEn5z1VF9b/0J1wkANUk/Yi+UhTT9vHGQhXayqlXX+m2tBgv8PsOLSjcJsoBYUygdEVEdckn91WKhtrReQSGKk2yZGcU3fYWiRMwzGr2r2RWz6ozMUF+3umj5WK4D/pR7wBZBVfTKM4e4zxJteSQVkgGG03ctWStiv3tDdFwIzBIwCBPXHz46DjoDIkd6OJmv7xjSiP4alZ2qKE9EiASSbeKTGTIrrVwEI+UogxN474sqJGDBsZsMAibXlBQkptd4AyV34jKGY4wUf/ap5mNqFJLW1iuckYLBQEyFkhs1yhk3O0G2fa3dBMcz7RRavlrg1IxYrofpYhCdv1vL8kBUfKhoe8lG7gAjBEIFcDiYuqvwltNi4tp08nh1wIMnpnfZakLAV9nsnX+MWvZQLD9itZhSFPqYMMG9E3vm25/zm1LGzvYHDpzpMb4/18G8MCviXyXGamhn7wlJ5GDDYWoynYf8e13jbi0TWfK7/iEpG8gb6TaPnDiy4hCLI9Xl0kttRq9cZZawI6fH0mAjc04yX5OHHMgJMYbqCVSgG8pX9sAv36t2IQTGKyvGW0kbyR/9gZwNxfxGP9kQcUXuRXw824PPHtDeprCxxQopO1xpmb6VLKv8EBeRwJl87DtgwsYt6/61y0MOFPwDsUJI33ykbLV9FpEb/aWvQOrFUEbeFIhfeV4svQYbRScr+BCoXmAsIF0Yy6WZDVpAfFrt7PTtqvmJLFhSClRz2OhoT+KyvrrUbP0wQQiDZukg+fcOCka61SOJeFMdaCR3k4eZMDgmCcMqkx96yiI5NfLbPN9Q4T+ABQhSxYnAYjY/T3QbGHUTToMZwvlevdmKO0son43xU3sQUgx77ylkv5l7OxztxhaTlE7Tiyhyihzjc6uT5+XBqoDUqUiLIAe6+0hCQzXMsA3pONWZ1jCovoDNu56yjYUSAjXhpmsvf8ei6LMWzsNMtOUVuBNy9RCZFrUUg9zf8N+gpMiz+kCOhIPyUT7lHOmy2iMTIJM9Rpx8dBnwPUbJ4TVyLqhj7p8CgiYjlWCUY3DbzQAA2GLWtLO/S6Os1f69I68EZBv9e2fhK2jxxkkiT7HdnOGlY3H/CwOHdRW28uv8npda1dvPcHhAVseoX1kuxPpBRx8uwO8DyqzMlarmE8KFJRUyzaZOao9iA1kojdi54i1YUvAkWy7zHmJTTezZzRNKJ6TUtwLTJmVdrQqWIkiMjXRTRIk34/f+B4i1bVLfvCUTjLmKoyJvZFugq8v6L9WWNrrkKroiTyTxlrZdu66MEvXZNMnM/i6UWQvpKcXBwP/byd9pfWcvNxrn2IHbnNHhVu4giI2qHbPrg3GOth2gYfaJ9skQ/7wGB/rncqDEfNZHzfSWReo9zaCyka4aYHj7G1MeGf1HdQVsZ6WghN3cdpv8efOs4zhpJJQgdNRhL2jb52Kt+4/kAFRXZaTOHw9RiYmf3oXOtuOHuRBZEcd+bjA0wtHm9dK+QB9SbfXREXVUV1wuowLvD9bQ4CZ9Nj/zspuodT4f/lbHF40/4xkumqgaBnYo+dULYT7CZFk8Qe4gyipEBq3jaWJALBG6xQe6F5zXPeMaUM1iGJ2FexjXXsQlZ494YtHwAGlBdBGBhc1g06oqyCvQUQ0BmVOHj+7mi/LEnOMAqHNpWk8rSUkedqNYMAaexlnYQJrSSSNOUg4P7k58V3xLIZM23VcgUMXSmIGoRgP4CMPslJ/LpjNI3ZzYFIyq0Irc4pvdtGv7BXtPDR579t00uBSdvGwLi24NQLwzNgz2fQfSwcWP2W1r+r7wGL3/k3LF6hU2LsaqZlXrCDq8VkPq5yOYzM3yEw/snXqpzmHK3iK/vB6dy/qOzFuEMpso6P+JbOTYuRgd/y+EQ/3hOypycMFgsyGnYkXdGYtaRl3+/KL406/lGyoaa0Ss2vFVAAtAhlTDUI9UDLrwQYFIQ9WUpTfljaaTTDHBM5b9/sX/zaCDyOR6mKNA32TZ9trUCKYfLcMXZUnOV1iXYXD3W5m1W9XffiNqoL483Hrl1RFwQYbCnWWnr897IKNMzN7MOqJ7a8SODHyNQ70Dhbc1Uxmh1fqwQWJREVnwM4Z4ZU9TseRvP/R+MsTieCAE5bJtOkSNna/9pOswsrSXh1GUauMkZsQhr4an0CkQ2i79rxD41I+iiQ13lP1z/lRLHto0y7wfsGqJN4rtwcj8Js31eULny3KzA1kfv7+voRrVIeHGkycNAGv54daJnCvk5nc/bSUYtXs2V68Hp8CrhUpUUtdnRZ+ujReF+wmK+Fe3lC/2zWB9Scc308oB3B6YRTMPFjLLtgLL0T8LgsH5XZpYuetXIgGNFKko327YQWc7LY0hEDILCrMnJpEZgVgXPxGV9RqnQQibNRv6l5v6hsffDfhq349ID+4BF0g6LHN5+rVP8DwEOr28y2UPdE+/8X1BKD5tR/sXsgWy8dFDW0L6zA0bxYgIxKYGTRy0lUY0SqYaz6yM6Aosw4TggwILrHG6ymG+AIAqEdS0pWFBkekDipDbSdMCfgFfsV3QVLJTE8vAtaBJ28CVhgHHl9JkHcMmNZpjWX/hiMvh/dZnran/bAvp9bFW/M3b9AHcIhISxuVY0Cfz9A7g8Fyc9Mvm52id+xyfyFLo0iTxuHqwTp6i3W8baODOQs7gXl7YE+NFO1WtQTbIQFtUapOP7UiscAU2fvNo9rOPFN5qs+E7SOdmcU+J1ySnjvnbcLjzfbIDKkfL9gAA53TzepMRcJnrVPzIAYmj9WJNT1ZQ4JmeWHpKHZPCjbCM3XbCTFUO1EXP8l1ydXvife3+L1OG17Vsyx60EAA69axnQ9Kp5SHR2oJMy43WYLY60W+d82DLKq/FcCZHfqZZ+PfA80CTGckGoQCBGB5rjx4+mCNdEzHhXEy/ukbilF5fj15khkT+3B7POd9oVZW3z/4Wu66bqCJd4zDOHdtkhHrRq5iwHCZb+ZnW+Z1ABbNKYUn0Dtmkg1htcEVpmQUt6wipYuZ5FWfUyb1qMUfyB/cf2t99ViGq/2/aPzQ7w44u1cgQJP1HLoj/VLlwbgwq9XpkXKdJh945Dk6W9VqmlDcjnIxf6XxV2YJvCvznsYNaEHv3Dbrik/plng7frCGQTJlmmWTwRmMirKQC2499RGencytG+WH3gNeFIqF7w3oupwgaqCtpqPnLx5XaIkSilc1W7F79xNb/NZcWSyHaBbdfEgKEq3+FYjojSM3lxLPXaWFy4B5VdzYDRWnRG/tNwJpDfqoDIec/GmFLpnTVJN/tTbRO2VevoRkO4XmkCC8bwwSJkseKItrH5062RFfL/KmvSciLup4GPWnkuCWI1Dcj6rX07mVXIgAViLebF7C/rhc8WbaCu83KEiWn0gwOfYDB6C4DiC0WfFN53zxDFmpFvNHKATvi9m0WV1eAvu7rI0hRfDDWj3DxNPwhkWiNak1oALSZ3g4A0NGye3Xy1iWSe+SUduUajD9ENUdsn5QEHXpMmT1fWwx75N2Gv9MA4Ymiqv/E8HzvkehSzi07sj+oRU4nPtjBxJaRAlW3C4h+LG8G2oWB2G4upYMkFAPJ2KhF7HezKowIT5eGeswdOTU+dVRlphw3HXKVrrHFCMrVgAXyd5IynG9ImBf/c1ZmnbWUl3byTKtRe1OJd58IVkRo5h1674e3zKvuvSIpmikasRDzVxJwCI+urQgQQEKeI0+QNI+wqDWaT7AIU0rjm5R72BQyLgREcEXP4sLkOEbgKnrbW0/QPpN/cZp6yokWWVnwQlMOCtcsvdVdpPbCZqYOTo1D05JgYg8MkK9WSh3j70Z6TxDJRVAZk7hgwFUCeoS40BwsZr6jxIxpzaR9ADIOlbDEkylSoBzWQ7nGd14RMROBYA2UZTyiK/5tv2ZAnK0x5NAuLLXn63/4f0I4qjNL7Xkm/XbYDNt/uqfKAOahxIbxktx9kVpAigRIOyUAZyzVhKN+/kFUVr5BQpghv02LJI+PhcG3G/WBo1nBDduNAHjW8m0O2/Hi6Ums6bZw7puVUgAAABt5iBdCWLsZ1cT2w2ur5eCZj4xvTEZzC0Ui//jcvhlMaI2QwEu8hmHmQ6QJDcs9hghDQJtknCP8oBl+0Tq9N/EojNlw9bLmw2gBuBrj3yP1oRV7eDwUqynJYnWd69cpusTG/51v8xiTp8V4BJDPRr3WZx5TX/KMJJWG/YSAS+5UgNgJFI2h0HgfoXucqVYp8fAkGwXibCIaS9WKQ3Dp682JbsQZsvyaWkp4J39SaJobwmAqcrZ6qHcdEYeSNa2ivrEJmEAO3IF0l0HL6jlk6o/8ITLnxOXUfWH5D9elYQIofzC3VIliZPqqfhWz5hnppTt8sKPG0ICGWL/yrpILsnLjmkpuwEVUTJ7n8XWMOmzGisHj5Wysw+kxR2FYKDir5FnWlXAw+Sv3eIg7Ypi4EobtFROsQxYYHSkUTvEm6kMMHwdNTnMkC2Vc8uSGyS0+T3oRkqtcbVeFLyqnLZQPOi9HECDlHf8+D0hFNMXP/tzT0S8ush+OUAAA=";
+function raven(size=54){ return `<img class="mascot" src="${MASCOT}" width="${size}" height="${size}" alt="Тренер" style="flex:0 0 auto;display:block;border-radius:50%;object-fit:cover;box-shadow:0 8px 22px rgba(255,59,67,.30), 0 0 0 1px rgba(255,255,255,.12) inset" loading="lazy">`; }
+function coach(text,glad){ return `<div class="coach ${glad?'glad':''}">${raven()}<div class="bubble">${text}</div></div>`; }
+function disp(r){ return r==='T'?'10':r; }
+function cardHTML(c,extra='',deal=true,delay=0){ return `<div class="pcard ${suitColor(c.s)} ${extra} ${deal?'deal':''}" style="animation-delay:${delay}ms"><span class="r">${disp(c.r)}</span><span class="c">${SUIT_CH[c.s]}</span><span class="s">${SUIT_CH[c.s]}</span></div>`; }
+function cardsHTML(arr,extra='',startDelay=0,gap=120){ return arr.map((c,i)=>cardHTML(c,extra,true,startDelay+i*gap)).join(''); }
+const RAVEN_LINES=['Сегодня тренируем не знания, а решения.','Сначала доска. Потом кнопка.','Ты не проиграешь из-за удачи. Проиграешь из-за математики.','Одна пара — не повод терять стек.','Скучный фолд часто и есть правильный.','Позиция важнее карт. Почти всегда.','Считай ауты, а не надежды.','Хороший игрок думает диапазонами, а не картами.','Не плати за мечту по цене, которая её не стоит.','Тильт — самый дорогой лик в покере.','Маленькая ставка на сухой доске — большая прибыль.','Если не знаешь, зачем ставишь, — чекни.','Блефуй тех, кто умеет фолдить. Остальных — вэлью-бей.','Дисперсия врёт на коротке. Решения — нет.','Терпение оплачивается. Азарт — нет.'];
+function ravenLine(){ return RAVEN_LINES[Math.floor(Math.random()*RAVEN_LINES.length)]; }
+function coachCard(text){
+  const seq=RAVEN_LINES.map(t=>`<span class="tk-item">${t}</span>`).join('<span class="tk-dot">♦</span>');
+  const run=seq+'<span class="tk-dot">♦</span>'+seq+'<span class="tk-dot">♦</span>';
+  return `<div class="ticker" aria-label="Покерные цитаты"><div class="ticker-track">${run}</div></div>`; }
+function cyclePhrase(silent){ const el=document.getElementById('ravenPhrase'); if(!el)return; let n,g=0; do{n=ravenLine();}while(n===el.textContent&&g++<8); el.textContent=n; el.classList.remove('phrasefade'); void el.offsetWidth; el.classList.add('phrasefade'); if(!silent)hp('tap'); }
+
+/* ============================================================================
+   12. РОУТЕР  (+ Telegram BackButton)
+   ============================================================================ */
+const TABS=['home','analyzer','blog','map','profile'];
+const BACK={onbGoal:'onbWelcome',evgym:'home',ranges:'home',boardlab:'home',river:'home',hod:'home',report:'home'};
+function go(name,arg){
+  state.screen=name; hideMain();
+  const parent=BACK[name]; setBack(parent?()=>go(parent):null);
+  const fns={onbWelcome:scrWelcome,onbGoal:scrGoal,home:scrHome,evgym:scrEvGym,report:scrReport,analyzer:scrAnalyzer,ranges:scrRanges,boardlab:scrBoardLab,river:scrRiver,blog:scrBlog,map:scrMap,profile:scrProfile,hod:scrHandOfDay};
+  const fn=fns[name]||scrHome;
+  const el=document.getElementById('screen');
+  el.className='scroll '+(TABS.includes(name)?'with-nav':'');
+  el.innerHTML=`<div class="fade">${fn(arg)}</div>`;
+  const nav=document.getElementById('bottomnav'); const main=TABS.includes(name);
+  nav.style.display=main?'flex':'none'; nav.querySelectorAll('button').forEach(b=>b.classList.toggle('active',b.dataset.tab===name));
+  el.scrollTop=0; if(fn.after)fn.after(arg); bindTerms(); save();
+}
+
+/* ============================================================================
+   13. ОБЩИЙ РЕНДЕР СТОЛА
+   ============================================================================ */
+function tableScene(o){
+  const hero=o.hero||[], board=o.board||[];
+  return `<div class="felt" id="felt">
+    <div class="seatlabel">Villain${o.villPos?' · '+o.villPos:''}${o.villStack?' · стек '+o.villStack:''}</div>
+    <div class="chiparea" id="villChips"></div>
+    <div class="potbox"><div class="lbl">Банк${o.villBet?' · ставка '+o.villBet:''}</div><div class="amt" id="potAmt">${o.pot||0}</div></div>
+    <div class="cardrow ${(board.length<=3)?'':''}" id="boardRow">${cardsHTML(board,'',o.dealDelay??320,150)}</div>
+    <div class="chiparea" id="heroChips"></div>
+    <div class="cardrow" id="heroRow">${cardsHTML(hero,'',0,140)}</div>
+    <div class="seatlabel">Hero${o.heroPos?' · '+o.heroPos:''}${o.heroStack?' · стек '+o.heroStack:''}</div>
+  </div>`;
+}
+
+/* ============================================================================
+   14. ОНБОРДИНГ (без выбора уровня)
+   ============================================================================ */
+function scrWelcome(){
+  return `<div style="padding-top:26px" class="center">
+    <div style="display:flex;justify-content:center">${raven(96)}</div>
+    <div class="sp"></div><span class="eyebrow">Poker Coach</span>
+    <h1 style="margin-top:8px;font-size:40px">Тренируй решения.<br>Не играй на деньги.</h1>
+    <p class="muted" style="margin-top:14px;font-size:15px">Короткие покерные тренировки: разбор раздач, диапазоны, чтение доски, pot odds, ривер-решения и поиск утечек.</p>
+    <div class="sp"></div><div class="sp"></div>
+    <button class="btn btn-red cta-primary" onclick="go('onbGoal')">Начать →</button>
+    <p class="legal">Образовательный тренажёр. Без игры на деньги.</p></div>`;
+}
+if(inTG)scrWelcome.after=()=>setMain('Начать',()=>go('onbGoal'));
+
+function scrGoal(){
+  const goals=[['analyze','Разбор моих раздач','⌕'],['ranges','Диапазоны','▦'],['board','Чтение доски','♣'],['pot','Pot odds','◆'],['river','Ривер-решения','♦'],['preflop','Префлоп','♥'],['leaks','Найти мои ошибки','⚠']];
+  return `<div class="topbar"><div class="back" onclick="go('onbWelcome')">←</div><h2>Что тренируем?</h2></div>
+    ${coach('Выбери, что качаем в первую очередь. Это не экзамен — это спортзал.')}
+    <div class="sp"></div>
+    ${goals.map(([k,t,ic])=>`<div class="opt ${state.goals.includes(k)?'on':''}" onclick="toggleGoal('${k}')"><span class="ic">${ic}</span><div>${t}</div><span class="chk">✓</span></div>`).join('')}
+    <div class="sp"></div>
+    <button class="btn btn-red cta-primary" onclick="finishOnb()">Войти в тренажёр →</button>
+    <p class="legal">Образовательный тренажёр. Без игры на деньги.</p>`;
+}
+function toggleGoal(k){ const i=state.goals.indexOf(k); i<0?state.goals.push(k):state.goals.splice(i,1); save(); hp('tap'); go('onbGoal'); }
+function finishOnb(){ state.onboarded=true; save(); hideMain(); go('home'); }
+if(inTG)scrGoal.after=()=>setMain('Войти в тренажёр',()=>finishOnb());
+
+/* ============================================================================
+   15. ГЛАВНЫЙ ЭКРАН — EV GYM dashboard
+   ============================================================================ */
+function scrHome(){
+  const modes=[
+    ['ranges','Диапазоны','матрица + тренажёры','▦'],
+    ['boardlab','Чтение доски','Board Lab','♣'],
+    ['evgym','Pot Odds','цена решения','◆',"go('evgym')"],
+    ['river','Ривер','call / fold','♦'],
+    ['hod','Раздача дня','спот со ставками','★'],
+  ];
+  return `<div style="display:flex;justify-content:space-between;align-items:center;margin-top:2px">
+      <div><span class="eyebrow">Poker Coach</span><h1 style="margin-top:5px;font-size:30px">Привет, игрок</h1></div>
+      <div style="filter:drop-shadow(0 6px 14px rgba(255,59,67,.35))">${raven(46)}</div></div>
+    <div class="sp"></div>
+    <div class="hero-card">
+      <div class="lbl">Опыт тренировок</div>
+      <div class="val"><span id="stXp">0</span> XP</div>
+      <div style="display:flex;gap:18px;margin-top:16px;position:relative">
+        <div><div style="font-family:var(--fdisp);font-weight:800;font-size:20px">🔥 ${state.streak}</div><div class="muted" style="font-size:11px;margin-top:2px">серия</div></div>
+        <div><div style="font-family:var(--fdisp);font-weight:800;font-size:20px" id="stAcc">0%</div><div class="muted" style="font-size:11px;margin-top:2px">точность</div></div>
+        <div><div style="font-family:var(--fdisp);font-weight:800;font-size:20px;color:var(--red)" id="stEv">0</div><div class="muted" style="font-size:11px;margin-top:2px">EV loss</div></div>
+      </div>
+    </div>
+    <div class="sp"></div>
+    <div class="navcard big" onclick="go('evgym')" style="cursor:pointer">
+      <div class="ic" style="font-size:13px;letter-spacing:.16em;text-transform:uppercase;opacity:.85">Сегодня · 10 минут</div>
+      <div class="t" style="margin-top:8px">Начать тренировку</div>
+      <div class="d">10 спотов: диапазоны · доска · pot odds · ривер</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:14px;position:relative">
+        <div class="bar" style="flex:1;background:rgba(255,255,255,.25)"><i style="width:${state.dailyTotal?Math.min(100,state.dailyDone/state.dailyTotal*100):0}%;background:#fff;box-shadow:none"></i></div>
+        <span style="font-family:var(--fdisp);font-weight:800">${state.dailyDone||0}/${state.dailyTotal||5}</span></div>
+    </div>
+    <div class="sp"></div>
+    ${state.topMistake&&state.topMistake!=='—'?`<div class="tile" style="display:flex;align-items:center;gap:10px;font-size:13px;margin-bottom:14px"><span style="font-size:18px">🎯</span><div>Над чем работать: <b style="color:#fff">${state.topMistake}</b></div></div>`:''}
+    <div class="eyebrow" style="margin-bottom:10px;display:block">Режимы</div>
+    <div class="grid">
+      ${modes.map(m=>`<div class="navcard" onclick="${m[4]||("go('"+m[0]+"')")}"><div class="ic">${m[3]}</div><div class="t">${m[1]}</div><div class="d">${m[2]}</div></div>`).join('')}
+      <div class="navcard dark" onclick="go('blog')"><div class="ic">▤</div><div class="t">Журнал</div><div class="d">разборы и теория</div></div>
+    </div>
+    <div class="sp"></div>
+    ${coachCard(ravenLine())}
+    <p class="legal">Образовательный тренажёр. Без игры на деньги.</p>`;
+}
+scrHome.after=function(){ animateNumber(document.getElementById('stXp'),0,state.xp,900); animateNumber(document.getElementById('stAcc'),0,state.accuracy,900,'%'); const ev=document.getElementById('stEv'); if(ev)animateNumber(ev,0,state.evLoss,900); };
+
+/* ============================================================================
+   16. EV GYM — 10 спотов
+   ============================================================================ */
+function P(s){return parse(s);}
+function pick(a){return a[Math.floor(Math.random()*a.length)];}
+function dealHand(){ const d=shuffleDeck(); return [d.pop(),d.pop()]; }
+function dealBoardHero(n){ const d=shuffleDeck(); const hero=[d.pop(),d.pop()]; const board=[]; for(let i=0;i<n;i++)board.push(d.pop()); return {hero,board}; }
+function feltFlop(board,label){ return `<div class="felt"><div class="seatlabel">${label||'Флоп'}</div><div class="cardrow">${cardsHTML(board,'',180,150)}</div></div>`; }
+// упрощённые диапазоны 3-бета и защиты BB
+const R_3B=buildRange(['99+','AQs+','AKo','KQs','A5s','A4s','A3s','KJs','QJs','JTs']);
+const R_3B_CALL=buildRange(['22+','ATs+','KTs+','QTs+','JTs','AJo+','KQo']);
+function decide3bet(h){ const code=handCode(h[0],h[1]); if(R_3B.has(code))return '3'; if(R_3B_CALL.has(code))return 'c'; return 'f'; }
+function gOpen(){ const pos=pick(['UTG','MP','CO','BTN','SB']); const h=dealHand(); const inr=isHandInRange(h[0],h[1],pos); const code=handCode(h[0],h[1]);
+  const why=inr?(code+' входит в open-диапазон '+pos+' — открываем.'):(code+' вне open-диапазона '+pos+' — фолд.');
+  return {cat:'Префлоп · open',scene:tableScene({hero:h,heroPos:pos,pot:1.5,heroStack:100}),coach:'Все сбросили до тебя. '+pos+', 100bb.',q:'Open или Fold?',opts:[['Open','o'],['Fold','f']],correct:inr?'o':'f',ok:why,bad:why,mt:'wide_open',ev:-0.6,lit:'gto'}; }
+function g3bet(){ const h=dealHand(); const dec=decide3bet(h); const code=handCode(h[0],h[1]);
+  const why={'3':code+' — это 3-бет (вэлью или блеф с блокером).','c':code+' — флэт-колл в позиции.','f':code+' — слишком слабо против опена, фолд.'}[dec];
+  return {cat:'Диапазоны · 3-bet',scene:tableScene({hero:h,heroPos:'BTN',villPos:'CO',pot:3.5,villBet:2.5,heroStack:100}),coach:'CO открыл 2.5bb, ты на баттоне.',q:'Реакция?',opts:[['Fold','f'],['Call','c'],['3-bet','3']],correct:dec,ok:why,bad:why,mt:'ignore_pos',ev:-0.6,lit:'gto'}; }
+function gPotOdds(){ let sp=null;
+  for(let t=0;t<120;t++){ const {hero,board}=dealBoardHero(3); const h=evaluateHand(hero,board); if(['flush','oesd','gut','combo'].includes(h.drawType)){ sp={hero,board,h}; break; } }
+  if(!sp){ const hero=[P('As'),P('9s')],board=[P('Ks'),P('7s'),P('2d')]; sp={hero,board,h:evaluateHand(hero,board)}; }
+  const pot=pick([60,80,100,120]); const bet=Math.max(2,Math.round(pot*pick([0.4,0.5,0.66,0.75,1.0])/2)*2);
+  const eq=estimateEquity(sp.h,true), req=calculatePotOdds(pot,bet,bet).required, correct=eq>=req?'c':'f';
+  const why='У тебя '+sp.h.drawName+' (~'+eq+'% к риверу), цена колла ~'+req+'%. '+(correct==='c'?'Эквити покрывает цену — колл.':'Цена выше эквити — фолд.');
+  return {cat:'Pot odds',scene:tableScene({hero:sp.hero,board:sp.board,pot,villBet:bet,heroPos:'BTN',villPos:'BB',heroStack:300}),coach:'Оппонент ставит '+bet+' в банк '+pot+'.',q:'Call или Fold?',opts:[['Call','c'],['Fold','f']],correct,ok:why,bad:why,mt:correct==='c'?'overfold':'call_no_odds',ev:-0.7,lit:'potodds'}; }
+function gTexture(){ const {board}=dealBoardHero(3); const b=analyzeBoard(board);
+  const correct=b.monotone?'mono':b.paired?'pair':(b.danger>=40?'wet':'dry');
+  const why='Доска '+b.texture+': '+b.reasons.slice(0,2).join('; ')+'.';
+  return {cat:'Чтение доски',scene:feltFlop(board,'Прочитай флоп'),coach:'Быстро оцени структуру.',q:'Тип доски?',opts:[['Сухая','dry'],['Мокрая','wet'],['Монотон','mono'],['Спарена','pair']],correct,ok:why,bad:why,mt:'bad_cbet',ev:-0.4,lit:'cbet'}; }
+function gRangeAdv(){ const {board}=dealBoardHero(3); const aggr=pick(['UTG','CO','BTN']),caller='BB'; const ra=analyzeRangeAdvantage(aggr,caller,board);
+  return {cat:'Range advantage',scene:feltFlop(board,aggr+' open → BB call'),coach:'Кому подходит доска?',q:'Преимущество диапазона?',opts:[[aggr+' (агр.)',aggr],['BB (колл)',caller],['Равно','примерно равно']],correct:ra.who,ok:ra.why,bad:ra.why,mt:'ignore_pos',ev:-0.5,lit:'gto'}; }
+function gCbet(){ const {hero,board}=dealBoardHero(3); const b=analyzeBoard(board), h=evaluateHand(hero,board);
+  const wet=b.monotone||b.connected||b.danger>=40, draw=['flush','oesd','combo'].includes(h.drawType); let correct,why;
+  if(draw){correct='b33';why='У тебя '+h.drawName+' — полублеф уместен: фолд-эквити плюс аутсы.';}
+  else if(!wet&&b.top>=11){correct='b33';why='Сухая высокая доска — твоё преимущество диапазона. Маленький c-bet 33%.';}
+  else if(wet){correct='ch';why='Мокрая доска ('+b.texture+') хорошо ложится на BB. Чаще чек.';}
+  else {correct='b33';why='Доска сухая — небольшой c-bet давит дёшево.';}
+  return {cat:'C-bet',scene:tableScene({hero,board,pot:6,heroPos:'BTN',heroStack:100}),coach:'Ты префлоп-агрессор. Действие на флопе?',q:'Check, Bet 33% или Bet 75%?',opts:[['Check','ch'],['Bet 33%','b33'],['Bet 75%','b75']],correct,ok:why,bad:why,mt:'bad_cbet',ev:-0.5,lit:'cbet'}; }
+function gRiverEV(){ const s=genRiverSpot(); const why='Твоя рука: '+s.h.madeName+'. '+s.why;
+  return {cat:'Ривер',scene:tableScene({hero:s.hero,board:s.board,pot:s.pot,villBet:s.bet,heroPos:s.heroPos,villPos:s.villPos,heroStack:200}),coach:'Оппонент ставит '+s.bet+' в банк '+s.pot+' на ривере.',q:'Call или Fold?',opts:[['Call','c'],['Fold','f']],correct:s.correct,ok:why,bad:why,mt:'river_err',ev:s.evBad,lit:'mdf'}; }
+function evTasks(){
+  const plan=[gOpen,gOpen,gTexture,gCbet,gPotOdds,gPotOdds,gRangeAdv,g3bet,gRiverEV,gTexture];
+  for(let i=plan.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[plan[i],plan[j]]=[plan[j],plan[i]];}
+  return plan.map(g=>g());
+}
+let ev=null;
+function scrEvGym(){ ev={tasks:evTasks(),pos:0,correct:0,xp:0,evLoss:0,answered:false,mistakes:[]}; return `<div id="evHost"></div>`; }
+scrEvGym.after=function(){ renderEv(); };
+function renderEv(){
+  const T=ev.tasks[ev.pos], n=ev.tasks.length, i=ev.pos+1, host=document.getElementById('evHost'); if(!host)return;
+  host.innerHTML=`<div class="slidein">
+    <div class="topbar"><div class="back" onclick="go('home')">✕</div>
+      <div style="flex:1"><div class="bar thin"><i style="width:${ev.pos/n*100}%"></i></div></div>
+      <span class="pill">${i}/${n}</span></div>
+    <span class="eyebrow">${T.cat}</span>
+    <div class="sp"></div>${T.scene}<div class="sp"></div>
+    ${coach(T.coach)}<div class="sp"></div>
+    <p style="font-weight:700">${T.q}</p>
+    <div class="row wrap" id="evOpts" style="margin-top:10px">${T.opts.map(o=>`<button class="btn btn-ghost" onclick="answerEv('${o[1]}',this)">${o[0]}</button>`).join('')}</div>
+    <div id="evFb"></div></div>`;
+  bindTerms();
+}
+function answerEv(val,btn){
+  if(ev.answered)return; ev.answered=true; const T=ev.tasks[ev.pos];
+  const ok=val===T.correct;
+  document.querySelectorAll('#evOpts .btn').forEach(b=>b.disabled=true);
+  const fb=document.getElementById('evFb');
+  if(ok){ hp('ok'); ev.correct++; const gain=12; ev.xp+=gain; btn.classList.remove('btn-ghost'); btn.classList.add('btn-black','pulseCorrect');
+    fb.innerHTML=`<div class="fb ok"><div class="ttl">✓ Верно</div><p style="margin:8px 0">${T.ok}</p>${citeLit(T.lit)}<div class="xp">+${gain} XP</div></div>`;
+  } else { hp('err'); btn.classList.add('shakeWrong'); btn.style.borderColor='var(--red)'; ev.evLoss+=T.ev; ev.mistakes.push(T.mt); updateLeaks(T.mt,T.ev);
+    fb.innerHTML=`<div class="fb bad"><div class="ttl">✕ Не оптимально</div><p style="margin:8px 0">${T.bad}</p>${citeLit(T.lit)}<div class="evloss">EV ${T.ev}</div>
+      <button class="btn btn-soft btn-sm" style="margin-top:10px" onclick="openTutorial('${T.mt}')">Разобрать ошибку</button></div>`;
+  }
+  fb.insertAdjacentHTML('beforeend',`<button class="btn btn-red cta-primary" style="margin-top:12px" onclick="nextEv()">${ev.pos+1<ev.tasks.length?'Дальше':'Отчёт'} →</button>`);
+  if(inTG)setMain('Дальше',()=>nextEv());
+  fb.scrollIntoView({behavior:'smooth',block:'center'}); bindTerms();
+}
+function nextEv(){ ev.pos++; ev.answered=false; if(ev.pos>=ev.tasks.length){finishEv();return;} renderEv(); }
+function finishEv(){
+  const acc=Math.round(ev.correct/ev.tasks.length*100);
+  state.accuracy=acc; state.evLoss=Math.round((state.evLoss+ev.evLoss)*100)/100; state.xp+=ev.xp; state.sessions++; state.streak++;
+  const freq={}; ev.mistakes.forEach(m=>freq[m]=(freq[m]||0)+1);
+  const top=Object.entries(freq).sort((a,b)=>b[1]-a[1])[0];
+  state.topMistake=top?leakName(top[0]):'нет грубых ошибок'; if(state.dailyDone<state.dailyTotal)state.dailyDone++; save();
+  go('report');
+}
+
+/* ============================================================================
+   17. SESSION REPORT
+   ============================================================================ */
+function scrReport(){
+  const acc=state.accuracy, evl=Math.round(ev.evLoss*100)/100;
+  return `<div class="center" style="padding-top:18px">${raven(84)}
+    <h1 style="margin-top:12px">Отчёт тренировки</h1></div>
+    <div class="sp"></div>
+    <div class="stats"><div class="stat"><div class="v" id="rAcc">0%</div><div class="l">Точность</div></div>
+      <div class="stat red"><div class="v" id="rEv">0</div><div class="l">EV loss</div></div>
+      <div class="stat ghost"><div class="v">${ev.correct}/${ev.tasks.length}</div><div class="l">Спотов</div></div></div>
+    <div class="sp"></div>
+    <div class="vblock"><div class="k">Главная ошибка</div><div class="v">${state.topMistake}</div></div>
+    <div class="vblock"><div class="k">Сильный навык</div><div class="v">Префлоп-решения</div></div>
+    <div class="vblock"><div class="k">Слабый навык</div><div class="v">Чтение мокрых досок</div></div>
+    <div class="vblock"><div class="k">Рекомендация</div><div class="v">Завтра пройди Board Lab: мокрые доски и c-bet.</div></div>
+    <div class="sp"></div>${coach('Результат одной сессии — шум. Тренируй процесс. '+citeLit('math').replace(/<[^>]+>/g,''),true)}
+    <div class="sp"></div>
+    <button class="btn btn-red" onclick="go('boardlab')">Тренировать главный лик →</button>
+    <div class="sp"></div>
+    <div class="row"><button class="btn btn-soft" onclick="go('evgym')">Повторить</button><button class="btn btn-soft" onclick="go('home')">Домой</button></div>`;
+}
+scrReport.after=function(){ animateNumber(document.getElementById('rAcc'),0,state.accuracy,800,'%'); animateNumber(document.getElementById('rEv'),0,Math.round(ev.evLoss*100)/100,800); };
+
+/* ============================================================================
+   18. АНАЛИЗ РАЗДАЧИ — рабочий rule-based анализатор + симуляция
+   ============================================================================ */
+const POSLIST=['UTG','MP','CO','BTN','SB','BB'];
+let an=null;
+function boardCount(street){ return street==='Префлоп'?0:street==='Флоп'?3:street==='Терн'?4:5; }
+function scrAnalyzer(){
+  if(!an) an={heroPos:'BTN',villPos:'BB',street:'Флоп',hero:[null,null],board:[null,null,null,null,null],pot:100,villBet:50,action:'Call',active:'h0'};
+  return `<div style="margin-top:2px"><span class="eyebrow">Анализатор</span><h1 style="margin-top:5px">Разбор раздачи</h1></div>
+    <p class="muted" style="margin-top:8px;font-size:13px">Собери ситуацию или брось случайную — движок разберёт её по правилам.</p>
+    <div class="sp"></div><div id="anBody"></div>`;
+}
+scrAnalyzer.after=function(){ renderAn(); };
+function renderAn(){
+  const c=an, bc=boardCount(c.street);
+  const slot=(id,card)=>{ const act=c.active===id?'active':''; if(card) return `<div class="pcard ${suitColor(card.s)} tap" onclick="anClear('${id}')"><span class="r">${disp(card.r)}</span><span class="c">${SUIT_CH[card.s]}</span><span class="s">${SUIT_CH[card.s]}</span></div>`; return `<div class="empty-slot ${act}" onclick="anActivate('${id}')">+</div>`; };
+  const heroSlots=`<div style="display:flex;gap:6px">${slot('h0',c.hero[0])}${slot('h1',c.hero[1])}</div>`;
+  let boardSlots=''; for(let i=0;i<bc;i++) boardSlots+=slot('b'+i,c.board[i]);
+  const used=new Set([...c.hero.filter(Boolean),...c.board.filter(Boolean)].map(cardStr));
+  let deck='';
+  SUITS.forEach(s=>{ const col=suitColor(s)==='red'?'var(--red)':'#fff'; deck+=`<div class="suitlabel" style="color:${col}">${SUIT_CH[s]}</div><div class="deck">`+
+    RANKS.slice().reverse().map(r=>{ const cs=r+s, u=used.has(cs); return `<div class="pcard xs ${suitColor(s)} ${u?'dim':'tap'}" ${u?'':`onclick="anPick('${r}','${s}')"`}><span class="r">${disp(r)}</span><span class="c">${SUIT_CH[s]}</span></div>`; }).join('')+`</div>`; });
+  document.getElementById('anBody').innerHTML=`
+    <button class="btn btn-soft" onclick="anRandom()" style="margin-bottom:12px">🎲 Случайная раздача</button>
+    <label class="fld">Улица</label><div class="segrow">${['Префлоп','Флоп','Терн','Ривер'].map(s=>`<div class="seg ${c.street===s?'on':''}" onclick="anStreet('${s}')">${s}</div>`).join('')}</div>
+    <div class="row" style="margin-top:8px"><div style="flex:1"><label class="fld">Hero</label><select onchange="an.heroPos=this.value;renderAn()">${POSLIST.map(p=>`<option ${c.heroPos===p?'selected':''}>${p}</option>`).join('')}</select></div>
+      <div style="flex:1"><label class="fld">Villain</label><select onchange="an.villPos=this.value;renderAn()">${POSLIST.map(p=>`<option ${c.villPos===p?'selected':''}>${p}</option>`).join('')}</select></div></div>
+    <label class="fld">Карты Hero ${bc?'· борд':''}</label>
+    <div class="felt" style="padding:14px"><div style="display:flex;gap:14px;justify-content:center;align-items:center;flex-wrap:wrap">
+      <div class="center"><div class="seatlabel" style="margin-bottom:5px">Hero</div>${heroSlots}</div>
+      ${bc?`<div class="center"><div class="seatlabel" style="margin-bottom:5px">Доска</div><div style="display:flex;gap:5px">${boardSlots}</div></div>`:''}
+    </div></div>
+    <label class="fld">Выбери карту (нажми слот, затем карту)</label>${deck}
+    <div class="row" style="margin-top:10px"><div style="flex:1"><label class="fld">Банк</label><select onchange="an.pot=+this.value;renderAn()">${[50,75,100,150,200,300].map(v=>`<option ${c.pot===v?'selected':''}>${v}</option>`).join('')}</select></div>
+      <div style="flex:1"><label class="fld">Ставка villain</label><select onchange="an.villBet=+this.value;renderAn()">${[0,25,33,50,66,75,100,150].map(v=>`<option ${c.villBet===v?'selected':''}>${v}</option>`).join('')}</select></div></div>
+    <label class="fld">Действие Hero</label><div class="segrow">${['Fold','Check','Call','Bet','Raise','All-in'].map(a=>`<div class="seg ${c.action===a?'on':''}" onclick="an.action='${a}';renderAn()">${a}</div>`).join('')}</div>
+    <div class="sp"></div>
+    <div class="row"><button class="btn btn-soft" onclick="simulateHand()">▶ Симулировать</button><button class="btn btn-red" onclick="doAnalyze()">Разобрать</button></div>
+    <div id="anResult"></div>`;
+}
+function anActivate(id){ an.active=id; hp('tap'); renderAn(); }
+function anClear(id){ if(id[0]==='h')an.hero[+id[1]]=null; else an.board[+id.slice(1)]=null; an.active=id; renderAn(); }
+function anPick(r,s){ const card={r,s}; let id=an.active;
+  const filled=(id)=> id[0]==='h'? an.hero[+id[1]] : an.board[+id.slice(1)];
+  if(!id||filled(id)){ id=null; for(let i=0;i<2;i++)if(!an.hero[i]){id='h'+i;break;}
+    if(!id){const bc=boardCount(an.street); for(let i=0;i<bc;i++)if(!an.board[i]){id='b'+i;break;}} }
+  if(!id)return;
+  if(id[0]==='h')an.hero[+id[1]]=card; else an.board[+id.slice(1)]=card;
+  let nx=null; for(let i=0;i<2;i++)if(!an.hero[i]){nx='h'+i;break;}
+  if(!nx){const bc=boardCount(an.street); for(let i=0;i<bc;i++)if(!an.board[i]){nx='b'+i;break;}}
+  an.active=nx; hp('tap'); renderAn();
+}
+function anStreet(s){ an.street=s; const bc=boardCount(s); for(let i=bc;i<5;i++)an.board[i]=null; an.active='h0'; for(let i=0;i<2;i++)if(!an.hero[i]){an.active='h'+i;break;} renderAn(); }
+function anRandom(){ const bc=boardCount(an.street)||3; if(boardCount(an.street)===0)an.street='Флоп';
+  const deck=shuffleDeck(); an.hero=[deck.pop(),deck.pop()]; an.board=[null,null,null,null,null];
+  const n=boardCount(an.street); for(let i=0;i<n;i++)an.board[i]=deck.pop();
+  an.pot=[50,75,100,150,200][Math.floor(Math.random()*5)]; an.villBet=[0,33,50,66,75,100][Math.floor(Math.random()*6)];
+  an.active=null; hp('tap'); renderAn(); simulateHand();
+}
+function simulateHand(){
+  resetTableAnimation(); const hero=an.hero.filter(Boolean), board=an.board.slice(0,boardCount(an.street)).filter(Boolean);
+  if(hero.length<2){ alert('Выбери две карты Hero.'); return; }
+  hp('tap');
+  const host=document.getElementById('anResult');
+  host.innerHTML=tableScene({hero:[],board:[],pot:an.pot,villBet:an.villBet,heroPos:an.heroPos,villPos:an.villPos});
+  const heroRow=host.querySelector('#heroRow'), boardRow=host.querySelector('#boardRow');
+  dealCardsSequence(hero,heroRow,{gap:160});
+  setTimeout(()=>dealCardsSequence(board,boardRow,{gap:200}),hero.length*180+200);
+  if(an.villBet>0){ setTimeout(()=>{ const pb=host.querySelector('#potAmt');
+    animateChips(host.querySelector('#villChips'),host.querySelector('#potAmt'),an.villBet,'r'); animateNumber(pb,an.pot,an.pot+an.villBet,700);
+  }, hero.length*180+board.length*220+400); }
+  setTimeout(()=>doAnalyze(true),hero.length*180+board.length*220+900);
+}
+function gauge(pct){ const R=27,C=2*Math.PI*R,off=(C*(1-Math.max(0,Math.min(100,pct))/100)).toFixed(1);
+  return `<svg width="78" height="78" viewBox="0 0 78 78"><circle cx="39" cy="39" r="${R}" fill="none" stroke="rgba(255,255,255,.10)" stroke-width="8"/>
+    <circle cx="39" cy="39" r="${R}" fill="none" stroke="url(#gg)" stroke-width="8" stroke-linecap="round" stroke-dasharray="${C.toFixed(1)}" data-off="${off}" transform="rotate(-90 39 39)" style="stroke-dashoffset:${C.toFixed(1)};transition:stroke-dashoffset 1.05s cubic-bezier(.2,.8,.2,1)"/>
+    <defs><linearGradient id="gg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FF5257"/><stop offset="1" stop-color="#D11E22"/></linearGradient></defs></svg>`; }
+function doAnalyze(keepScene){
+  const hero=an.hero.filter(Boolean), board=an.board.slice(0,boardCount(an.street)).filter(Boolean);
+  if(hero.length<2){ alert('Выбери две карты Hero.'); return; }
+  const r=analyzeDecision({heroPos:an.heroPos,villPos:an.villPos,hero,board,pot:an.pot,villBet:an.villBet,action:an.action,street:an.street});
+  const host=document.getElementById('anResult'); const intro=keepScene?host.innerHTML:'';
+  host.innerHTML=intro+`<div class="panel soft fade" style="margin-top:14px">
+    <h2>Разбор раздачи</h2>
+    <div class="vblock"><div class="k">Краткий вердикт</div><div class="v">${r.verdict}</div></div>
+    <div class="vblock"><div class="k">Сила руки</div><div class="v">${r.h.desc}</div></div>
+    <div class="vblock"><div class="k">Доска</div><div class="v">${board.length?('Доска '+r.b.texture+': '+r.b.reasons.slice(0,2).join('; ')+'.'):'Префлоп — доски ещё нет.'}</div></div>
+    <div class="chartcard"><div class="gaugewrap"><div id="anGauge">${gauge(r.h.strength)}</div><div><div class="glabel">Сила руки сейчас</div><div class="gnum" id="anStr">0</div><div class="muted" style="font-size:11px">из 100</div></div></div></div>
+    <div class="chartcard"><div style="font-family:var(--fdisp);font-weight:800;font-size:14px;margin-bottom:12px">Эквити против цены</div>
+      <div class="eqbar eq"><i data-w="${Math.min(100,r.eq)}"></i><span class="lab">Твоё эквити</span><span class="val" id="anEq">0%</span></div>
+      <div class="eqbar req"><i data-w="${Math.min(100,r.po.required)}"></i><span class="lab">Нужно для колла</span><span class="val" id="anReq">0%</span></div>
+      <div class="muted" style="font-size:12px">${r.eq>=r.po.required?'Эквити покрывает цену — по математике колл ок.':'Эквити ниже цены — голый колл минусовый.'}</div></div>
+    <div class="vblock"><div class="k">Главная ошибка</div><div class="v">${r.mistake||'Грубых ошибок не вижу — линия разумна.'}</div></div>
+    <div class="vblock"><div class="k">Лучшее действие</div><div class="v">${r.best}</div></div>
+    <div style="margin-top:6px">${citeLit(r.litKey)}</div>
+    <div class="vblock"><div class="k">Что тренировать дальше</div>
+      <div class="row wrap" style="margin-top:6px">
+        <button class="btn btn-soft btn-sm" onclick="go('${r.drill}')">Похожие споты</button>
+        <button class="btn btn-soft btn-sm" onclick="openTutorial('${r.mistakeType||'call_no_odds'}')">Туториал</button>
+      </div></div></div>`;
+  setTimeout(()=>{
+    document.querySelectorAll('#anResult .eqbar>i').forEach(i=>i.style.width=i.dataset.w+'%');
+    const g=document.querySelector('#anGauge circle[data-off]'); if(g)g.style.strokeDashoffset=g.dataset.off;
+    animateNumber(document.getElementById('anEq'),0,r.eq,1000,'%');
+    animateNumber(document.getElementById('anReq'),0,r.po.required,1000,'%');
+    animateNumber(document.getElementById('anStr'),0,r.h.strength,1000);
+  },60);
+  hp(r.mistakeType?'err':'ok'); bindTerms();
+  document.getElementById('anResult').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+/* ============================================================================
+   19. ДИАПАЗОНЫ — матрица + тренажёры
+   ============================================================================ */
+let rangeMode='matrix', matrixPos='BTN';
+function scrRanges(){
+  const modes=[['matrix','Матрица'],['open','Open'],['3bet','3-bet'],['bb','BB Defense'],['adv','Range Adv'],['leak','Лики']];
+  return `<div class="topbar"><div class="back" onclick="go('home')">←</div><h2>Диапазоны</h2></div>
+    <div class="segrow">${modes.map(m=>`<div class="seg ${rangeMode===m[0]?'on':''}" onclick="setRangeMode('${m[0]}')">${m[1]}</div>`).join('')}</div>
+    <div class="sp"></div><div id="rangeBody"></div>`;
+}
+scrRanges.after=function(){ renderRangeBody(); };
+function setRangeMode(m){ rangeMode=m; hp('tap'); renderRangeBody(); }
+function renderRangeBody(){
+  const b=document.getElementById('rangeBody'); if(!b)return;
+  if(rangeMode==='matrix') b.innerHTML=matrixView();
+  else if(rangeMode==='open') rqStart('open',b);
+  else if(rangeMode==='3bet') rqStart('3bet',b);
+  else if(rangeMode==='bb') rqStart('bb',b);
+  else if(rangeMode==='adv') rqStart('adv',b);
+  else leakView(b);
+  bindTerms();
+}
+function matrixView(){
+  let cells='';
+  for(let i=0;i<13;i++)for(let j=0;j<13;j++){ const cls=cellClass(i,j,matrixPos); cells+=`<div class="rcell ${cls}" title="${cellLabel(i,j)}">${cellLabel(i,j)}</div>`; }
+  return `<div class="segrow">${POSLIST.map(p=>`<div class="seg ${matrixPos===p?'on':''}" onclick="matrixPos='${p}';renderRangeBody()">${p}</div>`).join('')}</div>
+    <div class="sp"></div>
+    <div class="matrix">${cells}</div>
+    <div class="mlegend"><span><i style="background:#111"></i>премиум</span><span><i style="background:#D62828"></i>open</span><span><i style="background:#f3f3f3"></i>fold</span></div>
+    <div class="sp"></div>${coach('Позиция расширяет диапазон. На баттоне ходишь последним — открываешь намного больше. '+'<span class="term" data-term="Диапазон">Диапазон</span>')}
+    <div class="sp"></div>${citeLit('gto')}`;
+}
+// generic range quiz
+let rqz=null;
+function randCard(){return {r:RANKS[Math.floor(Math.random()*13)],s:SUITS[Math.floor(Math.random()*4)]};}
+function randHand(){ let a=randCard(),b=randCard(); let guard=0; while((a.r===b.r&&a.s===b.s)&&guard++<20)b=randCard(); if(a.r===b.r&&a.s===b.s)b.s=SUITS[(SUITS.indexOf(a.s)+1)%4]; return [a,b]; }
+const R_BB_3B=buildRange(['TT+','AQs+','AKo','A5s','A4s']);
+const R_BB_CALL=buildRange(['22+','A2s+','K7s+','Q8s+','J8s+','T8s+','97s+','86s+','75s+','65s','54s','A8o+','KTo+','QTo+','JTo']);
+function decideBB(h){ const code=handCode(h[0],h[1]); if(R_BB_3B.has(code))return '3'; if(R_BB_CALL.has(code))return 'c'; return 'f'; }
+function rqBuild(mode){
+  if(mode==='open'){ const list=[]; const ps=['UTG','MP','CO','BTN','SB'];
+    for(let i=0;i<20;i++){ const pos=ps[Math.floor(Math.random()*ps.length)], h=randHand(); const inr=isHandInRange(h[0],h[1],pos);
+      list.push({pos,hero:h,before:'Все сбросили до тебя',opts:[['Open','o'],['Fold','f']],correct:inr?'o':'f',
+        why:inr?(handCode(h[0],h[1])+' входит в open-диапазон '+pos+'.'):(handCode(h[0],h[1])+' вне open-диапазона '+pos+' — фолд.')}); }
+    return list;
+  }
+  if(mode==='3bet'){ const list=[];
+    for(let i=0;i<15;i++){ const h=dealHand(); const dec=decide3bet(h); const code=handCode(h[0],h[1]);
+      const why={'3':code+' — 3-бет (вэлью или блеф с блокером на туза).','c':code+' — флэт-колл в позиции.','f':code+' — слишком слабо против опена, фолд.'}[dec];
+      list.push({pos:'BTN',hero:h,before:'CO open 2.5bb',opts:[['Fold','f'],['Call','c'],['3-bet','3']],correct:dec,why}); }
+    return list;
+  }
+  if(mode==='bb'){ const list=[];
+    for(let i=0;i<15;i++){ const h=dealHand(); const dec=decideBB(h); const code=handCode(h[0],h[1]);
+      const why={'3':code+' — вэлью/блеф-3бет из BB.','c':code+' — дешёвая защита коллом.','f':code+' — слишком слабо даже для широкой защиты BB.'}[dec];
+      list.push({pos:'BB',hero:h,before:'BTN open 2.5bb',opts:[['Fold','f'],['Call','c'],['3-bet','3']],correct:dec,why}); }
+    return list;
+  }
+  if(mode==='adv'){ const list=[]; const aggrs=['UTG','MP','CO','BTN'];
+    for(let i=0;i<12;i++){ const {board}=dealBoardHero(3); const aggr=aggrs[Math.floor(Math.random()*aggrs.length)];
+      list.push({board,aggr,caller:'BB',before:aggr+' open → BB call'}); }
+    return list;
+  }
+  return [];
+}
+function rqStart(mode,host){ rqz={mode,list:rqBuild(mode),pos:0,correct:0,answered:false,wrong:[]}; renderRq(host||document.getElementById('rangeBody')); }
+function renderRq(host){
+  if(!host)return; const T=rqz.list[rqz.pos], n=rqz.list.length, i=rqz.pos+1;
+  if(rqz.mode==='adv'){
+    host.innerHTML=`<div class="slidein"><div class="topbar" style="padding:0"><span class="pill">${i}/${n}</span><div style="flex:1"></div></div>
+      <span class="eyebrow">Range Advantage</span>
+      <div class="sp"></div><div class="felt"><div class="seatlabel">${T.before}</div><div class="cardrow" id="rqBoard"></div></div>
+      <div class="sp"></div>${coach('Кому больше подходит доска?')}<div class="sp"></div>
+      <div class="row wrap" id="rqOpts"><button class="btn btn-ghost" onclick="answerAdv('${T.aggr}',this)">${T.aggr} (агрессор)</button><button class="btn btn-ghost" onclick="answerAdv('${T.caller}',this)">${T.caller} (коллер)</button><button class="btn btn-ghost" onclick="answerAdv('примерно равно',this)">Равно</button></div>
+      <div id="rqFb"></div></div>`;
+    dealCardsSequence(T.board,document.getElementById('rqBoard'),{gap:170}); bindTerms(); return;
+  }
+  host.innerHTML=`<div class="slidein"><div class="topbar" style="padding:0"><span class="pill" id="rqCount">${i}/${n}</span><div style="flex:1"><div class="bar thin"><i style="width:${rqz.pos/n*100}%"></i></div></div></div>
+    <div class="sp"></div>
+    <div class="felt"><div class="seatlabel">${T.pos} · ${T.before}</div><div class="cardrow" id="rqHero"></div></div>
+    <div class="sp"></div>${coach('Твоё решение?')}<div class="sp"></div>
+    <div class="row wrap" id="rqOpts">${T.opts.map(o=>`<button class="btn btn-ghost" onclick="answerRq('${o[1]}',this)">${o[0]}</button>`).join('')}</div>
+    <div id="rqFb"></div></div>`;
+  dealCardsSequence(T.hero,document.getElementById('rqHero'),{gap:150}); bindTerms();
+}
+function answerRq(val,btn){
+  if(rqz.answered)return; rqz.answered=true; const T=rqz.list[rqz.pos]; const ok=val===T.correct;
+  document.querySelectorAll('#rqOpts .btn').forEach(b=>b.disabled=true);
+  const fb=document.getElementById('rqFb');
+  if(ok){ hp('ok'); rqz.correct++; btn.classList.add('btn-black','pulseCorrect'); btn.classList.remove('btn-ghost');
+    fb.innerHTML=`<div class="fb ok"><div class="ttl">✓ Верно</div><p style="margin:6px 0">${T.why}</p></div>`;
+  } else { hp('err'); btn.classList.add('shakeWrong'); btn.style.borderColor='var(--red)'; rqz.wrong.push(handCode(T.hero[0],T.hero[1])); updateLeaks(rqz.mode==='open'?'wide_open':'ignore_pos',-0.5);
+    fb.innerHTML=`<div class="fb bad"><div class="ttl">✕ Не оптимально</div><p style="margin:6px 0">${T.why}</p><button class="btn btn-soft btn-sm" style="margin-top:8px" onclick="openTutorial('wide_open')">Почему?</button></div>`;
+  }
+  fb.insertAdjacentHTML('beforeend',`<button class="btn btn-red" style="margin-top:10px" onclick="nextRq()">${rqz.pos+1<rqz.list.length?'Следующая рука':'Итог'} →</button>`);
+  fb.scrollIntoView({behavior:'smooth',block:'center'});
+}
+function answerAdv(val,btn){
+  if(rqz.answered)return; rqz.answered=true; const T=rqz.list[rqz.pos]; const ra=analyzeRangeAdvantage(T.aggr,T.caller,T.board);
+  const ok = val===ra.who;
+  document.querySelectorAll('#rqOpts .btn').forEach(b=>b.disabled=true);
+  const fb=document.getElementById('rqFb');
+  if(ok){hp('ok');rqz.correct++;btn.classList.add('btn-black','pulseCorrect');btn.classList.remove('btn-ghost');}
+  else{hp('err');btn.classList.add('shakeWrong');updateLeaks('ignore_pos',-0.4);}
+  fb.innerHTML=`<div class="fb ${ok?'ok':'bad'}"><div class="ttl">${ok?'✓ Верно':'✕ Не точно'}</div><p style="margin:6px 0">Преимущество: <b>${ra.who}</b>. ${ra.why}</p>${citeLit('gto')}</div>
+    <button class="btn btn-red" style="margin-top:10px" onclick="nextRq()">${rqz.pos+1<rqz.list.length?'Дальше':'Итог'} →</button>`;
+  fb.scrollIntoView({behavior:'smooth',block:'center'});
+}
+function nextRq(){ rqz.pos++; rqz.answered=false; if(rqz.pos>=rqz.list.length){rqFinish();return;} renderRq(document.getElementById('rangeBody')); }
+function rqFinish(){
+  const acc=Math.round(rqz.correct/rqz.list.length*100); state.xp+=rqz.correct*4; save();
+  const host=document.getElementById('rangeBody');
+  host.innerHTML=`<div class="center fade" style="padding-top:14px">${raven(76)}<h2 style="margin-top:10px">Сессия диапазонов</h2>
+    <div class="sp"></div><div class="stats"><div class="stat"><div class="v" id="raAcc">0%</div><div class="l">Точность</div></div>
+      <div class="stat red"><div class="v">${rqz.correct}/${rqz.list.length}</div><div class="l">Верных</div></div></div>
+    <div class="sp"></div>${rqz.wrong.length?`<div class="vblock"><div class="k">Руки с ошибкой</div><div class="v">${[...new Set(rqz.wrong)].join(', ')}</div></div>`:'<p class="muted">Ошибок нет — чисто.</p>'}
+    <div class="sp"></div><button class="btn btn-red" onclick="renderRangeBody()">Повторить</button>
+    <div class="sp"></div><button class="btn btn-soft" onclick="go('home')">Домой</button></div>`;
+  animateNumber(document.getElementById('raAcc'),0,acc,800,'%');
+}
+function leakView(host){
+  const spots=[
+    {txt:'Ты открыл K8o с UTG',verd:'Слишком широко для ранней позиции. K8o вне UTG-диапазона.',mt:'wide_open'},
+    {txt:'Ты сбросил AJs на баттоне без рейза',verd:'Слишком тайтово — AJs хочет открываться с BTN.',mt:'ignore_pos'},
+    {txt:'Ты заколлировал 3-бет с Q9o',verd:'Q9o слишком слаба, чтобы продолжать против 3-бета вне позиции.',mt:'wide_open'},
+    {txt:'Ты сбросил BB против мин-рейза с 65s',verd:'65s — выгодная защита BB по такой цене.',mt:'weak_bb'},
+  ];
+  let i=0;
+  host.innerHTML=`<div id="leakSpot"></div>`;
+  window._renderLeak=()=>{ const s=spots[i%spots.length];
+    document.getElementById('leakSpot').innerHTML=`<div class="slidein"><span class="eyebrow">Range Leak</span>
+      <div class="panel" style="margin-top:10px;border-color:var(--red)"><h3 style="color:var(--red)">${s.txt}</h3><p style="margin-top:8px">${s.verd}</p>${citeLit('gto')}</div>
+      <div class="sp"></div><div class="row"><button class="btn btn-soft" onclick="openTutorial('${s.mt}')">Почему?</button><button class="btn btn-red" onclick="i_leak_next()">Следующая</button></div></div>`;
+    bindTerms(); };
+  window.i_leak_next=()=>{ i++; window._renderLeak(); };
+  window._renderLeak();
+}
+
+/* ============================================================================
+   20. BOARD LAB — живое чтение доски
+   ============================================================================ */
+function boardProps(board){
+  const b=analyzeBoard(board); const vals=board.map(c=>rv(c.r)); const top=Math.max(...vals), low=Math.min(...vals);
+  return {'Сухая':b.danger<22&&!b.monotone&&!b.paired,'Мокрая':b.danger>=40||b.texture==='мокрая','Спаренная':b.paired,
+   'Монотонная':b.monotone,'Two-tone':b.twoTone&&!b.monotone,'Связанная':b.connected,'Высокая':top>=12,'Низкая':top<=9,'Опасна для 1 пары':b.danger>=40};
+}
+let boardMode='flash';
+function scrBoardLab(){
+  const modes=[['flash','Flash'],['danger','Danger'],['adv','Range Adv'],['cbet','C-bet'],['onepair','Одна пара'],['evo','Эволюция']];
+  return `<div class="topbar"><div class="back" onclick="go('home')">←</div><h2>Board Lab</h2></div>
+    <div class="segrow">${modes.map(m=>`<div class="seg ${boardMode===m[0]?'on':''}" onclick="setBoardMode('${m[0]}')">${m[1]}</div>`).join('')}</div>
+    <div class="sp"></div><div id="boardBody"></div>`;
+}
+scrBoardLab.after=function(){ renderBoardBody(); };
+function setBoardMode(m){ boardMode=m; hp('tap'); renderBoardBody(); }
+function renderBoardBody(){ const b=document.getElementById('boardBody'); if(!b)return;
+  ({flash:flashStart,danger:dangerView,adv:advBoardView,cbet:cbetView,onepair:onePairView,evo:evoView}[boardMode]||flashStart)(b); bindTerms(); }
+
+/* --- Board Flash (сессия из 6) --- */
+const PROP_KEYS=['Сухая','Мокрая','Спаренная','Монотонная','Two-tone','Связанная','Высокая','Низкая','Опасна для 1 пары'];
+let flashS=null;
+function flashStart(host){ flashS={i:0,correct:0,total:6,sel:new Set(),phase:'show'}; renderFlash(host); }
+function renderFlash(host){
+  const board=dealBoardHero(3).board; flashS.board=board;
+  host.innerHTML=`<div class="slidein"><div class="topbar" style="padding:0"><span class="pill">${flashS.i+1}/${flashS.total}</span><div style="flex:1"></div></div>
+    <div class="sp"></div><div class="felt"><div class="seatlabel">Запомни доску</div><div class="cardrow" id="flBoard"></div></div>
+    <div id="flBody"></div></div>`;
+  const row=document.getElementById('flBoard'); dealCardsSequence(board,row,{gap:150});
+  setTimeout(()=>{ row.querySelectorAll('.pcard').forEach(c=>c.classList.add('dim'));
+    document.getElementById('flBody').innerHTML=`<div class="sp"></div>${coach('Какие свойства у доски? Выбирай быстро.')}<div class="sp"></div>
+      <div class="chiprow" id="flProps">${PROP_KEYS.map(k=>`<div class="tag" data-k="${k}" onclick="this.classList.toggle('on')">${k}</div>`).join('')}</div>
+      <div class="sp"></div><button class="btn btn-red" onclick="checkFlash()">Проверить</button><div id="flFb"></div>`;
+  },1700);
+}
+function checkFlash(){
+  const board=flashS.board; const truth=boardProps(board);
+  let wrong=0; document.querySelectorAll('#flProps .tag').forEach(tg=>{ const k=tg.dataset.k, on=tg.classList.contains('on'), tr=truth[k];
+    tg.onclick=null; if(tr&&on)tg.classList.add('good'); else if(tr&&!on){tg.classList.add('good');tg.style.opacity=.55;} else if(!tr&&on){tg.classList.add('wrongpick');wrong++;} });
+  const allTrue=PROP_KEYS.filter(k=>truth[k]); const got=PROP_KEYS.filter(k=>truth[k]&&document.querySelector(`#flProps .tag[data-k="${k}"]`).classList.contains('on')&&!document.querySelector(`#flProps .tag[data-k="${k}"]`).style.opacity).length;
+  const ok=wrong===0; if(ok)flashS.correct++;
+  hp(ok?'ok':'err');
+  document.getElementById('flFb').innerHTML=`<div class="fb ${ok?'ok':'bad'}" style="margin-top:12px"><div class="ttl">${ok?'✓ Точно':'Почти'}</div>
+    <p style="margin:6px 0">Верные свойства: <b>${allTrue.join(', ')||'сухая радуга'}</b>.</p>${citeLit('cbet')}</div>
+    <button class="btn btn-red" style="margin-top:10px" onclick="nextFlash()">${flashS.i+1<flashS.total?'Следующая':'Итог'} →</button>`;
+}
+function nextFlash(){ flashS.i++; if(flashS.i>=flashS.total){ const host=document.getElementById('boardBody'); const acc=Math.round(flashS.correct/flashS.total*100); state.xp+=flashS.correct*3; save();
+    host.innerHTML=`<div class="center fade" style="padding-top:14px">${raven(76)}<h2 style="margin-top:10px">Board Flash — итог</h2>
+      <div class="sp"></div><div class="stats"><div class="stat"><div class="v" id="fAcc">0%</div><div class="l">Точность</div></div><div class="stat red"><div class="v">${flashS.total}</div><div class="l">Досок</div></div></div>
+      <div class="sp"></div><div class="vblock"><div class="k">Рекомендация</div><div class="v">Закрепи Danger-режим: учись видеть дро мгновенно.</div></div>
+      <div class="sp"></div><button class="btn btn-red" onclick="flashStart(document.getElementById('boardBody'))">Ещё раз</button></div>`;
+    animateNumber(document.getElementById('fAcc'),0,acc,800,'%'); return; }
+  renderFlash(document.getElementById('boardBody'));
+}
+
+/* --- Highlight The Danger --- */
+/* --- Highlight The Danger (случайный мокрый флоп) --- */
+let dgState=null;
+function randWetFlop(){ for(let t=0;t<90;t++){ const {board}=dealBoardHero(3); const b=analyzeBoard(board); if(b.danger>=38)return board; } return [P('9s'),P('8s'),P('7d')]; }
+function dangerView(host){
+  const board=randWetFlop(); const b=analyzeBoard(board); dgState={board,b};
+  const tags=b.reasons.map(r=>r.split('—')[0].trim());
+  host.innerHTML=`<div class="slidein"><span class="eyebrow">Highlight the Danger</span>
+    <div class="sp"></div><div class="felt"><div class="seatlabel">Флоп</div><div class="cardrow" id="dgBoard"></div></div>
+    <div class="sp"></div>${coach('Нажми всё, что делает доску опасной.')}<div class="sp"></div>
+    <div class="chiprow">${tags.map(x=>`<div class="tag" onclick="this.classList.toggle('on');hp('tap')">${x}</div>`).join('')}</div>
+    <div class="sp"></div><label class="fld">Danger score</label><div class="meter"><i id="dgMeter" style="width:100%"></i></div><div class="center big-num" id="dgVal" style="font-size:30px;margin-top:6px">0</div>
+    <div class="sp"></div><button class="btn btn-red" onclick="revealDanger()">Показать опасность</button><div id="dgFb"></div></div>`;
+  dealCardsSequence(board,document.getElementById('dgBoard'),{gap:160});
+}
+function revealDanger(){
+  const {board,b}=dgState; const sc={}; board.forEach(c=>sc[c.s]=(sc[c.s]||0)+1);
+  const dom=Object.keys(sc).sort((a,c)=>sc[c]-sc[a])[0]; const flushThreat=sc[dom]>=2;
+  document.querySelectorAll('#dgBoard .pcard').forEach((el,i)=>{ if((flushThreat&&board[i].s===dom)||b.connected)el.classList.add('danger'); });
+  document.querySelectorAll('#boardBody .tag').forEach(t=>t.classList.add('on'));
+  const meter=document.getElementById('dgMeter'); if(meter)meter.style.width=(100-b.danger)+'%';
+  animateNumber(document.getElementById('dgVal'),0,b.danger,900); hp('ok');
+  document.getElementById('dgFb').innerHTML=`<div class="fb bad" style="margin-top:12px"><div class="ttl">Доска ${b.texture}</div>
+    <p style="margin:6px 0">${b.reasons.join('; ')}. Одна пара тут уязвима.</p>${citeLit('cbet')}</div>`;
+  bindTerms();
+}
+
+/* --- Range Advantage (board) --- */
+function advBoardView(host){ rangeMode='adv'; rqStart('adv',host); }
+
+/* --- C-Bet Decision (случайный спот) --- */
+let cbetSpot=null;
+function genCbetSpot(){ const {hero,board}=dealBoardHero(3); const b=analyzeBoard(board), h=evaluateHand(hero,board);
+  const wet=b.monotone||b.connected||b.danger>=40, draw=['flush','oesd','combo'].includes(h.drawType); let correct,why;
+  if(draw){correct='b33';why='У тебя '+h.drawName+' — полублеф уместен: фолд-эквити плюс аутсы.';}
+  else if(!wet&&b.top>=11){correct='b33';why='Сухая высокая доска — твоё преимущество диапазона. Маленький c-bet 33%.';}
+  else if(wet){correct='ch';why='Мокрая доска ('+b.texture+') хорошо ложится на BB. Чаще чек.';}
+  else {correct='b33';why='Доска сухая — небольшой c-bet давит дёшево.';}
+  return {hero,board,correct,why}; }
+function cbetView(host){ cbetSpot=genCbetSpot(); const T=cbetSpot;
+  host.innerHTML=`<div class="slidein"><span class="eyebrow">C-Bet Decision · ты префлоп-агрессор</span>
+    <div class="sp"></div>${tableScene({hero:T.hero,board:T.board,pot:6,heroPos:'BTN'})}
+    <div class="sp"></div>${coach('Действие на флопе?')}<div class="sp"></div>
+    <div class="row wrap" id="cbOpts"><button class="btn btn-ghost" onclick="answerCbet('ch',this)">Check</button><button class="btn btn-ghost" onclick="answerCbet('b33',this)">Bet 33%</button><button class="btn btn-ghost" onclick="answerCbet('b75',this)">Bet 75%</button></div>
+    <div id="cbFb"></div></div>`; }
+function answerCbet(val,btn){ const T=cbetSpot; const ok=val===T.correct;
+  document.querySelectorAll('#cbOpts .btn').forEach(b=>b.disabled=true);
+  if(ok){hp('ok');btn.classList.add('btn-black','pulseCorrect');btn.classList.remove('btn-ghost');state.xp+=6;save();}
+  else{hp('err');btn.classList.add('shakeWrong');updateLeaks('bad_cbet',-0.5);}
+  document.getElementById('cbFb').innerHTML=`<div class="fb ${ok?'ok':'bad'}" style="margin-top:12px"><div class="ttl">${ok?'✓ Верно':'✕ Не лучший выбор'}</div><p style="margin:6px 0">${T.why}</p>${citeLit('cbet')}</div>
+    <button class="btn btn-red" style="margin-top:10px" onclick="cbetView(document.getElementById('boardBody'))">Следующая →</button>`; }
+
+/* --- One Pair Danger (случайная доска) --- */
+let opSpot=null;
+function genOnePairSpot(){ const {board}=dealBoardHero(3); const b=analyzeBoard(board);
+  const topVal=Math.max(...board.map(c=>rv(c.r))); const topRank=RANKS[topVal-2];
+  const freeSuit=SUITS.find(s=>!board.some(c=>c.r===topRank&&c.s===s))||'s';
+  const kr=pick(['A','K','Q','J']); const ks=SUITS.find(s=>!board.some(c=>c.r===kr&&c.s===s)&&!(kr===topRank&&s===freeSuit))||'h';
+  const hero=[{r:topRank,s:freeSuit},{r:kr,s:ks}];
+  const correct=b.danger>=45?'danger':b.danger>=24?'mid':'safe';
+  const why='Доска '+b.texture+' (опасность '+b.danger+'/100): '+(b.reasons.slice(0,2).join('; ')||'почти нет дро')+'. Чем мокрее доска, тем уязвимее одна пара.';
+  return {hero,board,correct,danger:b.danger,why}; }
+function onePairView(host){ opSpot=genOnePairSpot(); const T=opSpot;
+  host.innerHTML=`<div class="slidein"><span class="eyebrow">One Pair Danger</span>
+    <div class="sp"></div>${tableScene({hero:T.hero,board:T.board,pot:20,heroPos:'BTN'})}
+    <div class="sp"></div>${coach('Насколько в безопасности твоя пара на этой доске?')}<div class="sp"></div>
+    <div class="row" id="opOpts"><button class="btn btn-ghost" onclick="answerOnePair('safe',this)">Безопасно</button><button class="btn btn-ghost" onclick="answerOnePair('mid',this)">Средне</button><button class="btn btn-ghost" onclick="answerOnePair('danger',this)">Опасно</button></div>
+    <div class="sp"></div><div class="meter"><i id="opMeter" style="width:100%"></i></div><div id="opFb"></div></div>`; }
+function answerOnePair(val,btn){ const T=opSpot; const ok=val===T.correct; const lbl={safe:'Безопасно',mid:'Средне',danger:'Опасно'}[T.correct];
+  document.querySelectorAll('#opOpts .btn').forEach(b=>b.disabled=true);
+  document.querySelectorAll('#boardBody .felt .cardrow .pcard').forEach((c,i)=>{ if(i<3&&T.danger>=40)c.classList.add('danger'); });
+  if(document.getElementById('opMeter'))document.getElementById('opMeter').style.width=(100-T.danger)+'%';
+  if(ok){hp('ok');btn.classList.add('btn-black','pulseCorrect');btn.classList.remove('btn-ghost');state.xp+=6;save();}
+  else{hp('err');btn.classList.add('shakeWrong');updateLeaks('overplay_pair',-0.6);}
+  document.getElementById('opFb').innerHTML=`<div class="fb ${ok?'ok':'bad'}" style="margin-top:12px"><div class="ttl">${lbl}</div>
+    <p style="margin:6px 0">${T.why}</p>${citeLit('harr')}</div>
+    <button class="btn btn-red" style="margin-top:10px" onclick="onePairView(document.getElementById('boardBody'))">Ещё пример →</button>`;
+  bindTerms(); }
+
+/* --- Board Evolution (случайные 5 карт) --- */
+let evoStep=0, evoCards=null;
+function evoView(host){ evoStep=0; const d=shuffleDeck(); evoCards=[d.pop(),d.pop(),d.pop(),d.pop(),d.pop()];
+  host.innerHTML=`<div class="slidein"><span class="eyebrow">Board Evolution</span>
+    <div class="sp"></div><div class="felt"><div class="seatlabel" id="evoLbl">Флоп</div><div class="cardrow" id="evoBoard"></div></div>
+    <div class="sp"></div><label class="fld">Danger score</label><div class="meter"><i id="evoMeter" style="width:100%"></i></div><div class="center big-num" id="evoVal" style="font-size:26px;margin-top:5px">0</div>
+    <div class="sp"></div><div id="evoNote">${coach('Открываем флоп. Следи, как меняется опасность доски.')}</div>
+    <div class="sp"></div><button class="btn btn-red" id="evoBtn" onclick="evoNext()">Открыть флоп</button></div>`;
+}
+function evoNext(){
+  const labels=['Флоп','Терн','Ривер'], counts=[3,4,5];
+  if(evoStep>2){ evoView(document.getElementById('boardBody')); return; }
+  const n=counts[evoStep], board=evoCards.slice(0,n);
+  document.getElementById('evoLbl').textContent=labels[evoStep];
+  dealCardsSequence(board,document.getElementById('evoBoard'),{gap:120});
+  const b=analyzeBoard(board); const meter=document.getElementById('evoMeter'); if(meter)meter.style.width=(100-b.danger)+'%';
+  animateNumber(document.getElementById('evoVal'),0,b.danger,800);
+  let note;
+  if(evoStep===0) note='Стартовая доска: '+b.texture+'. '+((b.reasons[0]||'почти нет дро'))+'.';
+  else { const c=board[n-1]; note='Пришла '+disp(c.r)+SUIT_CH[c.s]+'. Теперь доска '+b.texture+': '+((b.reasons.slice(0,2).join('; '))||'спокойная')+'.'; }
+  document.getElementById('evoNote').innerHTML=coach(note);
+  const btn=document.getElementById('evoBtn'); evoStep++;
+  btn.textContent = evoStep>2?'Новая раздача':(evoStep===1?'Открыть терн':'Открыть ривер');
+  hp('tap'); bindTerms();
+}
+
+/* ============================================================================
+   21. RIVER CALL/FOLD TRAINER
+   ============================================================================ */
+let riverScene=null, riverSeen=new Set();
+function shuffleDeck(){ const d=[]; RANKS.forEach(r=>SUITS.forEach(s=>d.push({r,s}))); for(let i=d.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[d[i],d[j]]=[d[j],d[i]];} return d; }
+// «опасность» ривера для одной пары: возможны флеш / стрит / фулл-хаус
+function riverScary(board){
+  const sc={}; board.forEach(c=>sc[c.s]=(sc[c.s]||0)+1); const flush=Math.max(...Object.values(sc))>=3;
+  const rc={}; board.forEach(c=>rc[c.r]=(rc[c.r]||0)+1); const paired=Object.values(rc).some(n=>n>=2);
+  const vals=[...new Set(board.map(c=>rv(c.r)))]; if(vals.includes(14))vals.push(1);
+  let fourStraight=false; for(let lo=1;lo<=10;lo++){ if([lo,lo+1,lo+2,lo+3,lo+4].filter(v=>vals.includes(v)).length>=4)fourStraight=true; }
+  const reasons=[]; if(flush)reasons.push('возможен флеш'); if(fourStraight)reasons.push('возможен стрит'); if(paired)reasons.push('доска спарена');
+  return {scary:flush||fourStraight||(paired&&flush), flush, fourStraight, paired, reasons};
+}
+// rule-based решение для ривера (call/fold) + объяснение
+function riverDecision(hero,board,pot,bet){
+  const h=evaluateHand(hero,board); const s=riverScary(board);
+  const required=calculatePotOdds(pot,bet,bet).required; const mdf=Math.round(pot/(pot+bet)*100);
+  const overbet=bet>pot*1.05, big=bet>=pot*0.9;
+  const boardVals=board.map(c=>rv(c.r));
+  const strong=['set','two_pair','straight','flush','full_house','quads','straight_flush'].includes(h.cat);
+  let correct,why,evBad=-0.6;
+  if(strong){ correct='c'; why='У тебя '+h.madeName+' — на ривере это вэлью или сильный блеф-кэтчер. Колл (часто можно и рейзить на вэлью).'; }
+  else if(h.cat==='overpair'||h.cat==='top_pair'){
+    const kick=Math.max(0,...hero.map(c=>rv(c.r)).filter(v=>!boardVals.includes(v)||h.cat==='overpair'));
+    const strongKicker=h.cat==='overpair'||kick>=12;
+    if(s.scary||overbet){ correct='f'; why='Одна пара ('+h.madeName+') против '+(overbet?'овербета':'опасной доски: '+s.reasons.join(', '))+' — слишком слабый блеф-кэтчер. Фолд.'; evBad=-0.8; }
+    else if(strongKicker&&!big){ correct='c'; why=h.madeName+(h.cat==='top_pair'?' с хорошим кикером':'')+' на спокойной доске против умеренной ставки — нормальный блеф-кэтчер. По MDF фолдить всё подряд нельзя.'; }
+    else if(!strongKicker&&big){ correct='f'; why='Топ-пара со слабым кикером против крупной ставки — чаще фолд: тебя бьёт лучшее вэлью.'; evBad=-0.7; }
+    else { correct='c'; why=h.madeName+' против ставки по цене '+required+'% — колл ловит достаточно блефов.'; }
+  }
+  else if(h.cat==='weak_pair'){
+    if(!s.scary&&bet<=pot*0.55){ correct='c'; why='Средняя/слабая пара, но дёшево и доска спокойная — колл ловит блефы.'; }
+    else { correct='f'; why='Слабая пара против заметной ставки'+(s.scary?' на опасной доске':'')+' — обычно фолд.'; evBad=-0.6; }
+  }
+  else { // старшая карта / несобранное дро
+    if(bet<=pot*0.3){ correct='c'; why='Совсем дёшево против мелкой ставки — можно изредка ловить блеф, но это тонко.'; }
+    else { correct='f'; why='Нет готовой руки и шоудаун-вэлью против заметной ставки — лёгкий фолд.'; evBad=-0.5; }
+  }
+  return {h,correct,why,required,mdf,scary:s,evBad,strong};
+}
+// автогенерация неповторяющегося спота (позиции не повторяются подряд)
+function genRiverSpot(){
+  for(let attempt=0;attempt<60;attempt++){
+    let hpos,vpos; do{ hpos=POSLIST[Math.floor(Math.random()*POSLIST.length)]; vpos=POSLIST[Math.floor(Math.random()*POSLIST.length)]; }while(hpos===vpos);
+    if(riverScene&&riverScene.lastPos===hpos+'>'+vpos) continue;       // позиции не повторяются подряд
+    const deck=shuffleDeck(); const board=deck.splice(0,5);
+    let hero;
+    if(Math.random()<0.62){ const tgt=board[Math.floor(Math.random()*5)]; const i=deck.findIndex(c=>c.r===tgt.r);
+      const c1=i>=0?deck.splice(i,1)[0]:deck.splice(0,1)[0]; hero=[c1,deck.splice(0,1)[0]]; }
+    else hero=deck.splice(0,2);
+    const pot=[60,80,100,120,140,160][Math.floor(Math.random()*6)];
+    const frac=[0.5,0.66,0.75,1.0,1.3][Math.floor(Math.random()*5)];
+    const bet=Math.max(2,Math.round(pot*frac/2)*2);
+    const sig=handCode(hero[0],hero[1])+'|'+board.map(c=>c.r+c.s).sort().join('')+'|'+hpos+vpos;
+    if(riverSeen.has(sig)) continue;
+    riverSeen.add(sig); if(riverSeen.size>400) riverSeen=new Set();
+    const d=riverDecision(hero,board,pot,bet);
+    return {hero,board,pot,bet,heroPos:hpos,villPos:vpos,...d};
+  }
+  // запасной вариант
+  const deck=shuffleDeck(),board=deck.splice(0,5),hero=deck.splice(0,2),pot=100,bet=66;
+  return {hero,board,pot,bet,heroPos:'BTN',villPos:'CO',...riverDecision(hero,board,pot,bet)};
+}
+function scrRiver(){ riverSeen=new Set(); riverScene={n:0,answeredCount:0,correct:0,lastPos:null}; return `<div class="topbar"><div class="back" onclick="go('home')">←</div><h2>Ривер Call/Fold</h2></div><div id="rivBody"></div>`; }
+scrRiver.after=function(){ nextRiver(); };
+function nextRiver(){ const spot=genRiverSpot(); riverScene.spot=spot; riverScene.lastPos=spot.heroPos+'>'+spot.villPos; riverScene.answered=false; riverScene.n++; renderRiver(); }
+function renderRiver(){
+  const s=riverScene.spot, host=document.getElementById('rivBody'); if(!host)return;
+  const acc=riverScene.answeredCount?Math.round(riverScene.correct/riverScene.answeredCount*100):0;
+  host.innerHTML=`<div class="slidein">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <span class="pill red">Раздача ${riverScene.n}</span>
+      <span class="pill ghost">Точность ${acc}%</span></div>
+    <div class="tile" style="display:flex;gap:8px;align-items:center;font-size:12px;margin-bottom:12px;flex-wrap:wrap">
+      <span class="pill" style="font-size:11px;background:var(--black)">Hero · ${s.heroPos}</span>
+      <span class="muted">против</span>
+      <span class="pill ghost" style="font-size:11px">Villain · ${s.villPos}</span>
+      <span style="margin-left:auto;color:var(--muted);font-weight:600">ривер · ставка ${s.bet} в банк ${s.pot}</span></div>
+    ${coach('Оппонент ставит '+s.bet+' в банк '+s.pot+'. Call или Fold?')}
+    <div class="sp"></div>
+    ${tableScene({hero:s.hero,board:s.board,pot:s.pot,villBet:s.bet,heroPos:s.heroPos,villPos:s.villPos})}
+    <div class="sp"></div>
+    <div class="betgrid" id="rivOpts" style="grid-template-columns:1fr 1fr">
+      <div class="betbtn" onclick="answerRiver('c',this)" style="border-color:var(--red)"><div style="font-size:17px;color:var(--red)">Call</div><div style="font-size:11px;color:var(--muted);font-weight:600;margin-top:2px">плати ${s.bet}</div></div>
+      <div class="betbtn" onclick="answerRiver('f',this)"><div style="font-size:17px">Fold</div><div style="font-size:11px;color:var(--muted);font-weight:600;margin-top:2px">сбрось карты</div></div></div>
+    <p class="muted center" style="font-size:11px;margin-top:8px">Цена колла ≈ ${s.required}% эквити · MDF ≈ ${s.mdf}%</p>
+    <div id="rivFb"></div></div>`;
+  bindTerms();
+}
+function answerRiver(val,btn){
+  if(riverScene.answered)return; riverScene.answered=true; riverScene.answeredCount++;
+  const s=riverScene.spot, ok=val===s.correct;
+  document.querySelectorAll('#rivOpts .betbtn').forEach(b=>{b.onclick=null;b.style.opacity='.55';});
+  btn.style.opacity='1';
+  if(ok){ hp('ok'); riverScene.correct++; btn.classList.add('on','pulseCorrect'); state.xp+=8; save(); }
+  else { hp('err'); btn.classList.add('shakeWrong'); btn.style.borderColor='var(--red)'; updateLeaks('river_err',s.evBad);
+    document.querySelectorAll('#rivOpts .betbtn').forEach(b=>{ const isCall=b.querySelector('div').textContent==='Call'; if((s.correct==='c')===isCall){b.style.opacity='1';b.classList.add('on');} }); }
+  document.getElementById('rivFb').innerHTML=`<div class="fb ${ok?'ok':'bad'}" style="margin-top:14px"><div class="ttl">${ok?'✓ Верно':'✕ Не оптимально'} · правильно: ${s.correct==='c'?'Call':'Fold'}</div>
+    <div class="vblock" style="margin:10px 0"><div class="k">Твоя рука</div><div class="v">${s.h.madeName}${s.scary.reasons.length?' · доска: '+s.scary.reasons.join(', '):' · доска спокойная'}</div></div>
+    <p style="margin:6px 0">${s.why}</p>
+    <div class="mathrow"><span>Цена колла (pot odds)</span><b>${s.required}%</b></div>
+    <div class="mathrow" style="border:none"><span>MDF (упрощённо)</span><b>${s.mdf}%</b></div>
+    <div style="margin-top:6px">${citeLit('mdf')}</div></div>
+    <button class="btn btn-red" style="margin-top:10px" onclick="nextRiver()">Следующая раздача →</button>`;
+  if(inTG)setMain('Следующая раздача',()=>nextRiver());
+  document.getElementById('rivFb').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+/* ============================================================================
+   22. HAND OF THE DAY — betting panel + слайдер + фишки + replay
+   ============================================================================ */
+let bp=null;
+function scrHandOfDay(){ bp={pot:6,stack:100,action:null,amount:2,confirmed:false}; return `<div class="topbar"><div class="back" onclick="go('home')">←</div><h2>Раздача дня</h2></div><div id="hodBody"></div>`; }
+scrHandOfDay.after=function(){ renderHoD(); };
+function renderHoD(){
+  const host=document.getElementById('hodBody');
+  host.innerHTML=`<div class="slidein">${coach('Ты префлоп-агрессор на баттоне. BB чекнул. Твоё действие на флопе?')}
+    <div class="sp"></div>${tableScene({hero:[P('As'),P('Qs')],board:[P('Kc'),P('7d'),P('2s')],pot:bp.pot,heroPos:'BTN',villPos:'BB',heroStack:bp.stack,villStack:bp.stack})}
+    <div class="sp"></div><label class="fld">Действие</label>
+    <div class="betgrid" id="bpActions">
+      ${['Fold','Check','Bet','Raise','All-in'].map(a=>`<div class="betbtn" onclick="bpAction('${a}')">${a}</div>`).join('')}
+    </div>
+    <div id="bpSize"></div>
+    <div id="bpFb"></div></div>`;
+}
+function bpAction(a){ bp.action=a; bp.confirmed=false; hp('tap');
+  document.querySelectorAll('#bpActions .betbtn').forEach(b=>b.classList.toggle('on',b.textContent===a));
+  const zone=document.getElementById('bpSize');
+  if(a==='Bet'||a==='Raise'){
+    const max=a==='All-in'?bp.stack:bp.stack; bp.amount=Math.round(bp.pot*0.33);
+    zone.innerHTML=`<div class="sp"></div><div class="betsize"><span id="bpAmt">${bp.amount}</span></div>
+      <div class="chiparea" id="bpStack" style="margin-top:8px"></div>
+      <input type="range" min="1" max="${max}" value="${bp.amount}" oninput="bpSlide(+this.value)">
+      <div class="presets">${[['33%',.33],['50%',.5],['75%',.75],['100%',1]].map(p=>`<div class="preset" onclick="bpPreset(${p[1]},this)">${p[0]}</div>`).join('')}<div class="preset" onclick="bpAllin(this)">All-in</div></div>
+      <button class="btn btn-red" onclick="bpConfirm()">Подтвердить ставку</button>`;
+    bpRenderStack();
+  } else { zone.innerHTML=`<div class="sp"></div><button class="btn btn-red" onclick="bpConfirm()">Подтвердить: ${a}</button>`; }
+}
+function bpSlide(v){ bp.amount=v; const el=document.getElementById('bpAmt'); if(el)el.textContent=v; document.querySelectorAll('#bpSize .preset').forEach(p=>p.classList.remove('on')); bpRenderStack(); }
+function bpPreset(frac,el){ bp.amount=Math.max(1,Math.round(bp.pot*frac)); const inp=document.querySelector('#bpSize input'); if(inp)inp.value=bp.amount; document.getElementById('bpAmt').textContent=bp.amount; document.querySelectorAll('#bpSize .preset').forEach(p=>p.classList.remove('on')); el.classList.add('on'); bpRenderStack(); hp('tap'); }
+function bpAllin(el){ bp.amount=bp.stack; const inp=document.querySelector('#bpSize input'); if(inp)inp.value=bp.amount; document.getElementById('bpAmt').textContent=bp.amount; document.querySelectorAll('#bpSize .preset').forEach(p=>p.classList.remove('on')); el.classList.add('on'); bpRenderStack(); hp('tap'); }
+function bpRenderStack(){ const area=document.getElementById('bpStack'); if(!area)return; const n=Math.max(1,Math.min(8,Math.round(bp.amount/Math.max(1,bp.pot)*4))); area.innerHTML=''; for(let i=0;i<n;i++){const d=document.createElement('div');d.className='chip '+(i%2?'b':'r');d.textContent='';area.appendChild(d);} }
+function bpConfirm(){
+  if(!bp.action){alert('Выбери действие.');return;} bp.confirmed=true;
+  const host=document.getElementById('hodBody'); const heroChips=host.querySelector('#heroChips'), potAmt=host.querySelector('#potAmt');
+  let pct = (bp.action==='Bet'||bp.action==='Raise')? bp.amount/bp.pot : (bp.action==='All-in'?99:0);
+  // animate chips for any chips-in action
+  if(bp.action==='Bet'||bp.action==='Raise'||bp.action==='All-in'){
+    const amt=bp.action==='All-in'?bp.stack:bp.amount;
+    animateChips(heroChips,potAmt,amt,'r'); animateNumber(potAmt,bp.pot,bp.pot+amt,700);
+  }
+  // verdict + Raven sizing comment
+  let ok=false, ttl, msg, ravenMsg, lit='cbet', mt='';
+  if(bp.action==='Check'){ ttl='Допустимо, но пассивно'; msg='Чек не ошибка, но на сухой высокой доске маленький c-bet приносит больше: ты давишь диапазон BB дёшево.'; ravenMsg='Можно и чек. Но деньги лежат в маленькой ставке.'; }
+  else if(bp.action==='Fold'){ ttl='Это утечка'; msg='Фолд топовой руки-агрессора без причины теряет EV. Здесь надо забирать инициативу.'; ravenMsg='Фолд? Ты же был агрессором.'; mt='too_passive'; }
+  else if(bp.action==='Bet'||bp.action==='Raise'){
+    if(pct<=0.45){ ok=true; ttl='Отличный сайзинг'; msg='Маленький c-bet ~33% идеально подходит сухой K-7-2: дёшево, часто, с преимуществом диапазона.'; ravenMsg='Маленькая ставка — большая прибыль. Чисто.'; }
+    else if(pct<=0.85){ ttl='Великовато'; msg='75% банка на сухой доске — перебор. Тут эффективнее частый мелкий c-bet.'; ravenMsg='Зачем так много на пустой доске?'; mt='bad_cbet'; }
+    else { ttl='Слишком много'; msg='Овербет/большая ставка на сухой доске раздувает банк без нужды.'; ravenMsg='Это не та доска, чтобы лить банк.'; mt='bad_cbet'; }
+  } else if(bp.action==='All-in'){ ttl='Перебор'; msg='Олл-ин на флопе K-7-2 — потеря ценности: лучшие фолдят, худшие не платят.'; ravenMsg='Олл-ин? С топ-парой на пустой доске?'; mt='overplay_pair'; }
+  if(ok){state.xp+=10;save();} else if(mt)updateLeaks(mt,-0.6);
+  hp(ok?'ok':'err');
+  document.getElementById('bpFb').innerHTML=`<div class="fb ${ok?'ok':'bad'} ${ok?'pulseCorrect':''}" style="margin-top:14px"><div class="ttl">${ok?'✓ ':'⚠ '}${ttl}</div>
+    <p style="margin:6px 0">${msg}</p>${coach(ravenMsg)}<div style="margin-top:8px">${citeLit(lit)}</div>
+    ${ok?'<div class="xp">+10 XP</div>':`<button class="btn btn-soft btn-sm" style="margin-top:8px" onclick="openTutorial('${mt||'bad_cbet'}')">Показать туториал</button>`}</div>
+    <div class="sp"></div><label class="fld">Replay раздачи</label><div id="replayHost"></div>`;
+  buildReplay();
+  document.getElementById('bpFb').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+/* ---------- REPLAY с таймлайном ---------- */
+let replayState=null;
+function buildReplay(){
+  const streets=[
+    {label:'Preflop',board:[],pot:6,note:'BTN open 2.5bb, BB call. Hero: A♠Q♠.'},
+    {label:'Flop',board:[P('Kc'),P('7d'),P('2s')],pot:6,note:'Сухая высокая доска — преимущество у агрессора.'},
+    {label:'Turn',board:[P('Kc'),P('7d'),P('2s'),P('4h')],pot:10,note:'Бланк. Доска по-прежнему сухая.'},
+    {label:'River',board:[P('Kc'),P('7d'),P('2s'),P('4h'),P('9c')],pot:18,note:'Дро так и не появилось — вэлью топ-пары растёт.'},
+    {label:'Итог',board:[P('Kc'),P('7d'),P('2s'),P('4h'),P('9c')],pot:18,note:'Тонкое вэлью на каждой улице бьёт пассивную линию.'},
+  ];
+  replayHand(streets);
+}
+function replayHand(streets){
+  replayState={streets,i:0}; const host=document.getElementById('replayHost'); if(!host)return;
+  host.innerHTML=`<div class="timeline">${streets.map((s,i)=>`<div class="tl-step ${i===0?'on':''}" onclick="replayGo(${i})">${s.label}</div>`).join('')}</div>
+    <div id="replayStage"></div>
+    <button class="btn btn-soft btn-sm" style="margin-top:6px" onclick="replayPlay()">▶ Проиграть заново</button>`;
+  replayGo(0);
+}
+function replayGo(i){
+  replayState.i=i; const s=replayState.streets[i];
+  document.querySelectorAll('#replayHost .tl-step').forEach((el,k)=>{el.classList.toggle('on',k===i);el.classList.toggle('done',k<i);});
+  const stage=document.getElementById('replayStage');
+  stage.innerHTML=`<div class="felt" style="margin-top:8px"><div class="seatlabel">${s.label} · банк ${s.pot}</div><div class="cardrow" id="rpBoard"></div></div><div class="sp"></div>${coach(s.note)}`;
+  if(s.board.length)dealCardsSequence(s.board,document.getElementById('rpBoard'),{gap:120}); bindTerms();
+}
+function replayPlay(){ let k=0; const tick=()=>{ if(k>=replayState.streets.length)return; replayGo(k); k++; setTimeout(tick,650); }; tick(); }
+
+
+/* ============================================================================
+   24. БЛОГ (покерная литература)
+   ============================================================================ */
+function scrBlog(){
+  return `<div style="margin-top:2px"><span class="eyebrow">Журнал</span><h1 style="margin-top:5px">Покерный разбор</h1></div>
+    <p class="muted" style="margin-top:8px;font-size:13px">Разборы ситуаций и идеи из профессиональной литературы. Каждая статья — на 3–5 минут.</p>
+    <div class="sp"></div>
+    ${BLOG.map((a,i)=>`<div class="article" onclick="openArticle(${i})">
+      <div class="cover"><div class="emoji">${a.emoji||'♠'}</div></div>
+      <div class="body"><div class="src">${a.src}</div><h3>${a.title}</h3><div class="ex">${a.ex}</div>
+        <div class="readmeta"><span class="pill red">${a.tag||'Покер'}</span><span class="pill ghost">⏱ ${a.min||'4 мин'}</span></div></div>
+    </div>`).join('')}
+    <p class="legal">Образовательный тренажёр. Без игры на деньги.</p>`;
+}
+function fmtArticle(body){
+  return body.map(p=>{
+    if(p.startsWith('§ ')) return `<h3>${p.slice(2)}</h3>`;
+    if(p.startsWith('» ')) return `<div class="quote">${p.slice(2)}</div>`;
+    if(p.startsWith('★ ')) return `<div class="kicker"><b>↳</b> ${p.slice(2)}</div>`;
+    return `<p>${p}</p>`;
+  }).join('');
+}
+function openArticle(i){ const a=BLOG[i]; hp('tap');
+  openSheet(`<div class="grab"></div>
+    <div class="cover" style="height:120px;border-radius:18px;margin-bottom:14px;display:flex;align-items:flex-end;padding:16px;position:relative;overflow:hidden;background:linear-gradient(150deg,#1c1c25,#0d0d12)">
+      <div style="position:absolute;width:220px;height:220px;border-radius:50%;top:-120px;right:-50px;background:radial-gradient(circle,rgba(255,59,67,.5),transparent 65%)"></div>
+      <div style="font-size:44px;position:relative">${a.emoji||'♠'}</div></div>
+    <div class="readmeta" style="margin-top:0"><span class="pill red">${a.tag||'Покер'}</span><span class="pill ghost">⏱ ${a.min||'4 мин'}</span></div>
+    <h2 style="margin-top:12px">${a.title}</h2>
+    <div class="src" style="color:var(--red);font-weight:700;font-size:12px;margin-top:8px">${a.src}</div>
+    <div class="longread">${fmtArticle(a.body)}</div>
+    <div class="sp"></div><button class="btn btn-red" onclick="closeSheet()">Готово</button>`);
+}
+
+/* ============================================================================
+   25. КАРТА ПОКЕР-КЛУБОВ                                            [GEO/MAPS]
+   ============================================================================ */
+let activeClub=-1;
+function scrMap(){
+  return `<div style="margin-top:2px"><span class="eyebrow">Клубы · Россия</span><h1 style="margin-top:5px">Где играть вживую</h1></div>
+    <p class="muted" style="margin-top:8px;font-size:13px">Покер-сообщества, школы и лайв-залы по России. Нажми на точку на карте или в списке — покажу адрес и контакты.</p>
+    <div class="sp"></div>
+    <div class="mapwrap"><div id="clubMapEl"></div></div>
+    <div class="sp"></div>
+    <div id="clubList">${CLUBS.map((c,i)=>clubRow(c,i)).join('')}</div>
+    <p class="legal">Адреса и контакты приведены как ориентир прототипа и могут быть неточными — проверяйте перед визитом. Лайв-покер в РФ легален только в игорных зонах.<br>Образовательный тренажёр. Без игры на деньги.</p>`;
+}
+scrMap.after=function(){ initClubMap(); };
+/* ===== Яндекс.Карты =====
+   Бесплатный ключ JavaScript API получается в кабинете разработчика Яндекса
+   (developer.tech.yandex.ru → «JavaScript API и HTTP Геокодер»).
+   Вставь его в YANDEX_KEY ниже. Карта домена github.io работает с бесплатным ключом. */
+const YANDEX_KEY = "";   // <-- сюда ключ Яндекс.Карт
+let clubMap=null, clubPlacemarks=[], PinLayout=null, ymapsLoading=false;
+function mapFail(msg){ const host=document.getElementById('clubMapEl'); if(host) host.innerHTML='<div class="map-fallback"><div class="mf-ic">🗺️</div><div>'+(msg||'Карта не загрузилась — проверь интернет и ключ Яндекс.Карт.')+'<br>Адреса клубов есть в списке ниже.</div></div>'; }
+function loadYandex(cb){
+  if(window.ymaps && window.ymaps.Map){ ymaps.ready(cb); return; }
+  if(ymapsLoading){ const t=setInterval(()=>{ if(window.ymaps&&window.ymaps.Map){ clearInterval(t); ymaps.ready(cb); } },120); setTimeout(()=>clearInterval(t),12000); return; }
+  ymapsLoading=true;
+  const s=document.createElement('script');
+  s.src='https://api-maps.yandex.ru/2.1/?lang=ru_RU&load=package.full'+(YANDEX_KEY?('&apikey='+encodeURIComponent(YANDEX_KEY)):'');
+  s.onload=()=>{ if(window.ymaps){ ymaps.ready(cb); } else mapFail(); };
+  s.onerror=()=>{ ymapsLoading=false; mapFail(); };
+  document.head.appendChild(s);
+}
+function clubBalloon(c){ return `<div class="club-pop"><div class="ptype">${c.type} · ${c.city}</div>`+
+  `<div class="prow"><span class="ico">📍</span><span>${c.addr}</span></div>`+
+  `<div class="prow"><span class="ico">✦</span><span>${c.contact}</span></div>`+
+  `<div class="prow" style="color:#9a9aa3"><span class="ico">ℹ️</span><span>${c.note}</span></div></div>`; }
+function initClubMap(){ const host=document.getElementById('clubMapEl'); if(!host)return; loadYandex(()=>buildYmap()); }
+function buildYmap(){
+  const host=document.getElementById('clubMapEl');
+  if(!host || !window.ymaps || !window.ymaps.Map){ mapFail(); return; }
+  host.innerHTML='';
+  if(clubMap){ try{clubMap.destroy();}catch(e){} clubMap=null; }
+  clubPlacemarks=[];
+  if(!PinLayout){ PinLayout=ymaps.templateLayoutFactory.createClass('<div class="ypin {{properties.cls}}">{{properties.num}}</div>'); }
+  clubMap=new ymaps.Map(host,{ center:[64,96], zoom:3, controls:['zoomControl'] },
+    { suppressMapOpenBlock:true, yandexMapDisablePoiInteractivity:true });
+  try{ clubMap.behaviors.enable('scrollZoom'); }catch(e){}
+  CLUBS.forEach((c,i)=>{
+    const pm=new ymaps.Placemark([c.lat,c.lng],{
+      num:i+1, cls:'',
+      balloonContentHeader:c.name,
+      balloonContentBody:clubBalloon(c),
+      hintContent:c.name
+    },{ iconLayout:PinLayout, iconShape:{type:'Circle',coordinates:[0,0],radius:16} });
+    pm.events.add('click',()=>selectClub(i,true));
+    clubMap.geoObjects.add(pm);
+    clubPlacemarks.push(pm);
+  });
+  try{ clubMap.setBounds(clubMap.geoObjects.getBounds(),{checkZoomRange:true,zoomMargin:35}); }catch(e){}
+}
+function clubRow(c,i){ return `<div class="club ${activeClub===i?'act':''}" id="club${i}" onclick="selectClub(${i})">
+  <div class="no">${i+1}</div><div style="flex:1"><b style="font-family:var(--fdisp)">${c.name}</b>
+  <div class="meta">${c.type} · ${c.city}</div>
+  <div class="meta" style="color:#cfcfd6;margin-top:4px">📍 ${c.addr}</div>
+  <div class="meta" style="color:#cfcfd6;margin-top:2px">✦ ${c.contact}</div>
+  <div class="meta" style="margin-top:3px">${c.note}</div></div></div>`; }
+function selectClub(i,fromMap){ activeClub=i; hp('tap');
+  document.querySelectorAll('.club').forEach((c,k)=>c.classList.toggle('act',k===i));
+  if(clubMap&&clubPlacemarks[i]){
+    clubPlacemarks.forEach((pm,k)=>{ try{pm.properties.set('cls',k===i?'act':'');}catch(e){} });
+    if(!fromMap){ const c=CLUBS[i]; try{ clubMap.setCenter([c.lat,c.lng], Math.max(clubMap.getZoom(),7), {duration:400}); }catch(e){} }
+    try{ clubPlacemarks[i].balloon.open(); }catch(e){}
+  }
+  const el=document.getElementById('club'+i); el&&el.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+
+/* ============================================================================
+   27. ПРОФИЛЬ
+   ============================================================================ */
+function scrProfile(){
+  const gmap={analyze:'Разбор раздач',ranges:'Диапазоны',board:'Чтение доски',pot:'Pot odds',river:'Ривер',preflop:'Префлоп',leaks:'Поиск ошибок'};
+  return `<h1 style="margin-top:4px">Профиль</h1><div class="sp"></div>
+    <div class="panel soft" style="display:flex;gap:13px;align-items:center">${raven(52)}<div><b style="font-family:var(--fdisp);font-size:17px">Игрок</b><div class="muted" style="font-size:13px">${state.sessions} сессий · ${state.xp} XP</div></div></div>
+    <div class="sp"></div>
+    <div class="stats s4"><div class="stat"><div class="v">${state.accuracy}%</div><div class="l">Точность</div></div><div class="stat red"><div class="v">${state.evLoss}</div><div class="l">EV loss</div></div><div class="stat ghost"><div class="v">🔥${state.streak}</div><div class="l">Серия</div></div><div class="stat"><div class="v">${state.xp}</div><div class="l">XP</div></div></div>
+    <div class="sp"></div><label class="fld">Мои цели</label>
+    <div class="chiprow">${(state.goals.length?state.goals:['analyze']).map(g=>`<span class="pill ghost">${gmap[g]||g}</span>`).join('')}</div>
+    <div class="sp"></div>
+    <div class="tile" style="display:flex;justify-content:space-between;align-items:center"><div><b>Сбросить прогресс</b><div class="muted" style="font-size:12px">XP, точность, утечки</div></div><button class="btn btn-soft btn-sm" onclick="if(confirm('Сбросить прогресс?')){localStorage.removeItem('pokercoach_ru');state=load();go('onbWelcome');}">↺</button></div>
+    <p class="legal">Образовательный тренажёр. Без игры на деньги.</p>`;
+}
+
+/* ============================================================================
+   28. ТУТОРИАЛЫ (после ошибок)
+   ============================================================================ */
+function cardArt(arr){ return `<div class="cardrow" style="margin:6px 0">${cardsHTML(arr,'',0,90)}</div>`; }
+function meterArt(v){ return `<div class="meter" style="margin:14px 0"><i style="width:${100-v}%"></i></div><div class="center big-num" style="font-size:26px;color:var(--red)">${v}</div>`; }
+const TUT={
+ call_no_odds:()=>({title:'Шансы банка',steps:[
+   {h:'Сравни цену с банком',b:'Колл оправдан, когда эквити выше нужного процента. Формула: колл ÷ итоговый банк.',art:'<div class="center big-num" style="font-size:40px;color:var(--red)">колл ÷ банк</div>'},
+   {h:'Пример',b:'Банк 100, ставка 50 → рискуешь 50, чтобы выиграть 200 → нужно ~25%.',art:'<div class="center big-num" style="font-size:34px">25%</div>'},
+   {h:'Дро и цена',b:'Гатшот ~16% к риверу. Если цена 31% — это минусовый колл.',art:cardArt([P('Kd'),P('Qd')])},
+   {h:'Правило',b:'Эквити ≥ цены → колл. Иначе фолд. Так советует <span class="term" data-term="Шансы банка">Склански</span>.',art:raven(64)}]}),
+ overplay_pair:()=>({title:'Одна пара — не натс',steps:[
+   {h:'Контекст важнее силы',b:'Оверпара сильна на сухой доске, но на мокрой/монотонной — это всего лишь пара.',art:cardArt([P('As'),P('Ad')])},
+   {h:'Опасная доска',b:'K♠9♠8♠ — флеши, стриты и две пары уже реальны.',art:meterArt(82)},
+   {h:'Вывод',b:'Контролируй банк: чек/колл вместо олл-ина. Так пишет Харрингтон.',art:raven(64)}]}),
+ bad_cbet:()=>({title:'C-bet по текстуре',steps:[
+   {h:'Сухая высокая доска',b:'K-7-2 подходит агрессору. Маленький c-bet ~33% давит дёшево и часто.',art:cardArt([P('Kc'),P('7d'),P('2s')])},
+   {h:'Мокрая доска',b:'9♠8♠7♦ хорошо ложится на BB. Здесь чаще чек, чем c-bet без эквити.',art:cardArt([P('9s'),P('8s'),P('7d')])},
+   {h:'Идея',b:'Сайзинг и частота зависят от доски. См. Эд Миллер «The Course».',art:raven(64)}]}),
+ wide_open:()=>({title:'Позиция и open',steps:[
+   {h:'Ранняя позиция = тайт',b:'Из UTG впереди весь стол — открывай только сильные руки.',art:'<div class="center big-num" style="font-size:34px">UTG</div>'},
+   {h:'Баттон = широко',b:'На BTN ходишь последним — можно открывать намного шире.',art:'<div class="center big-num" style="font-size:34px;color:var(--red)">BTN</div>'},
+   {h:'Вывод',b:'K8o из UTG — лик. На баттоне — норма. См. «Modern Poker Theory».',art:raven(64)}]}),
+ too_passive:()=>({title:'Не теряй вэлью',steps:[
+   {h:'Инициатива стоит денег',b:'Сильная рука на сухой доске хочет ставить на вэлью, а не пассивно чекать.',art:cardArt([P('As'),P('Qs')])},
+   {h:'Вывод',b:'Тонкое вэлью + защита > пассивный чек/фолд.',art:raven(64)}]}),
+ river_err:()=>({title:'Решения на ривере',steps:[
+   {h:'MDF',b:'Чтобы блеф не был автоприбыльным, защищай минимальную долю: банк ÷ (банк+ставка).',art:'<div class="center big-num" style="font-size:30px">MDF ≈ 57%</div>'},
+   {h:'Блеф-кэтч',b:'На сухой доске против средней ставки топ-пара ловит блефы. На пугающей — чаще фолд.',art:raven(64)}]}),
+};
+['ignore_pos','weak_bb','bad_bluff','overfold'].forEach(k=>{ if(!TUT[k])TUT[k]=TUT.call_no_odds; });
+let tutS={data:null,i:0};
+function openTutorial(type){ const b=TUT[type]||TUT.call_no_odds; tutS={data:b(),i:0}; renderTut(); document.getElementById('overlay').classList.add('show'); }
+function renderTut(){ const {data,i}=tutS, s=data.steps[i], last=i===data.steps.length-1;
+  document.getElementById('sheet').innerHTML=`<div class="grab"></div><span class="eyebrow">${data.title}</span>
+    <div style="margin:14px 0">${s.art||''}</div><h2>${s.h}</h2><p style="margin-top:8px;font-size:15px;line-height:1.55">${s.b}</p>
+    <div class="dots">${data.steps.map((_,k)=>`<i class="${k===i?'on':''}"></i>`).join('')}</div>
+    <div class="row">${i>0?`<button class="btn btn-soft btn-sm" onclick="tutPrev()">←</button>`:''}<button class="btn btn-red btn-sm" onclick="${last?'closeSheet()':'tutNext()'}">${last?'Понятно':'Дальше'}</button></div>`;
+  bindTerms();
+}
+function tutNext(){ if(tutS.i<tutS.data.steps.length-1){tutS.i++;renderTut();} }
+function tutPrev(){ if(tutS.i>0){tutS.i--;renderTut();} }
+
+/* ============================================================================
+   29. СЛОВАРЬ-ШИТ + ДОЛГОЕ НАЖАТИЕ
+   ============================================================================ */
+function openDict(key){ const e=dict[key]; if(!e){return;} hp('tap');
+  openSheet(`<div class="grab"></div><span class="eyebrow">Термин</span><h2 style="margin-top:6px">${key}</h2>
+    <p style="margin-top:10px;font-weight:600;font-size:15px">${e.d}</p>
+    <div class="vblock"><div class="k">Пример</div><div class="v">${e.ex}</div></div>
+    <div class="vblock"><div class="k">Подсказка</div><div class="v">${e.tip}</div></div>
+    <div class="sp"></div><button class="btn btn-black" onclick="closeSheet()">Закрыть</button>`);
+}
+function bindTerms(){ document.querySelectorAll('.term').forEach(el=>{ if(el._b)return; el._b=true; const k=el.dataset.term; let tm=null;
+  el.addEventListener('click',e=>{e.preventDefault();openDict(k);});
+  el.addEventListener('touchstart',()=>{tm=setTimeout(()=>openDict(k),420);},{passive:true});
+  el.addEventListener('touchend',()=>clearTimeout(tm)); el.addEventListener('touchmove',()=>clearTimeout(tm)); }); }
+function openSheet(html){ document.getElementById('sheet').innerHTML=html; document.getElementById('overlay').classList.add('show'); }
+function closeSheet(){ document.getElementById('overlay').classList.remove('show'); }
+
+/* ============================================================================
+   30. BOOT
+   ============================================================================ */
+go(state.onboarded?'home':'onbWelcome');
+/* фразы теперь крутятся в бегущей строке (CSS-анимация) — таймер не нужен */
+
+</script>
+</body>
+</html>
