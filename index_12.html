@@ -1765,7 +1765,7 @@ scrMap.after=function(){ initClubMap(); };
    Бесплатный ключ JavaScript API получается в кабинете разработчика Яндекса
    (developer.tech.yandex.ru → «JavaScript API и HTTP Геокодер»).
    Вставь его в YANDEX_KEY ниже. Карта домена github.io работает с бесплатным ключом. */
-const YANDEX_KEY = "";   // <-- сюда ключ Яндекс.Карт
+const YANDEX_KEY = "9b60bb78-9878-40d1-aaed-1841e542e4c7";   // <-- сюда ключ Яндекс.Карт
 let clubMap=null, clubPlacemarks=[], PinLayout=null, ymapsLoading=false;
 function mapFail(msg){ const host=document.getElementById('clubMapEl'); if(host) host.innerHTML='<div class="map-fallback"><div class="mf-ic">🗺️</div><div>'+(msg||'Карта не загрузилась — проверь интернет и ключ Яндекс.Карт.')+'<br>Адреса клубов есть в списке ниже.</div></div>'; }
 function loadYandex(cb){
